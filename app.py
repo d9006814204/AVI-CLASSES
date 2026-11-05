@@ -87,14 +87,25 @@ with app.app_context():
     db.create_all()
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
     admin_password=os.environ.get('ADMIN_PASSWORD','')
-    if not User.query.filter_by(email=admin_email).first():
-        # Secure by default: require an environment-provided password on first deployment.
-        if not admin_password:
-            admin_password=secrets.token_urlsafe(18)
-            print('\n[AVI CLASS TR-04] One-time generated admin password:',admin_password,'\nSet ADMIN_PASSWORD in environment after login.\n')
-        db.session.add(User(name='AVI CLASS TR-04 Admin',email=admin_email,password=generate_password_hash(admin_password),role='admin'))
-        db.session.commit()
+       admin_user = User.query.filter_by(email=admin_email).first()
 
+    if not admin_user:
+        if not admin_password:
+            admin_password = secrets.token_urlsafe(18)
+            print('\n[AVI CLASS TR-04] One-time generated admin password:', admin_password)
+
+        admin_user = User(
+            name='AVI CLASS TR-04 Admin',
+            email=admin_email,
+            password=generate_password_hash(admin_password),
+            role='admin'
+        )
+        db.session.add(admin_user)
+
+    elif admin_password:
+        admin_user.password = generate_password_hash(admin_password)
+
+    db.session.commit()
 @app.context_processor
 def globals_for_templates(): return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES}
 
