@@ -87,12 +87,12 @@ with app.app_context():
     db.create_all()
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
     admin_password=os.environ.get('ADMIN_PASSWORD','')
-       admin_user = User.query.filter_by(email=admin_email).first()
+    admin_user = User.query.filter_by(email=admin_email).first()
 
     if not admin_user:
         if not admin_password:
             admin_password = secrets.token_urlsafe(18)
-            print('\n[AVI CLASS TR-04] One-time generated admin password:', admin_password)
+            print('[AVI CLASS TR-04] One-time generated admin password:', admin_password)
 
         admin_user = User(
             name='AVI CLASS TR-04 Admin',
