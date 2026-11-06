@@ -1,4 +1,4 @@
-import os, csv, io, secrets, re
+import os, csv, io, secrets, re, hmac, hashlib
 from datetime import datetime, timezone
 from functools import wraps
 from urllib.parse import urlparse
@@ -8,6 +8,11 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, or_
+
+try:
+    import razorpay
+except ImportError:
+    razorpay = None
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
@@ -83,6 +88,17 @@ class CourseEnrollment(db.Model):
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
     __table_args__=(db.UniqueConstraint('user_id','item_id',name='uq_course_enrollment'),)
 
+class BillingSubscription(db.Model):
+    # Separate table: adding it does not alter or delete existing student/question records.
+    id=db.Column(db.Integer,primary_key=True)
+    user_id=db.Column(db.Integer,db.ForeignKey('user.id'),nullable=False,unique=True,index=True)
+    razorpay_subscription_id=db.Column(db.String(80),nullable=False,unique=True,index=True)
+    status=db.Column(db.String(30),nullable=False,default='created',index=True)
+    current_start=db.Column(db.Integer)
+    current_end=db.Column(db.Integer)
+    created_at=db.Column(db.DateTime,default=datetime.utcnow)
+    updated_at=db.Column(db.DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
+
 with app.app_context():
     db.create_all()
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
@@ -106,6 +122,37 @@ with app.app_context():
         admin_user.password = generate_password_hash(admin_password)
 
     db.session.commit()
+RAZORPAY_PLAN_ID = os.environ.get('RAZORPAY_PLAN_ID', 'plan_TwkTkdtUQrO23M').strip()
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '').strip()
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '').strip()
+RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '').strip()
+
+
+def razorpay_client():
+    if not razorpay or not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET or not RAZORPAY_PLAN_ID:
+        raise RuntimeError('Razorpay configuration is incomplete.')
+    return razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+
+def billing_is_active(user_id):
+    record = BillingSubscription.query.filter_by(user_id=user_id).first()
+    return record is None or record.status == 'active'  # Existing students are grandfathered.
+
+
+def set_subscription_state(subscription_id, status, entity=None):
+    record = BillingSubscription.query.filter_by(razorpay_subscription_id=subscription_id).first()
+    if not record:
+        return False
+    record.status = status or record.status
+    entity = entity or {}
+    if entity.get('current_start'):
+        record.current_start = int(entity['current_start'])
+    if entity.get('current_end'):
+        record.current_end = int(entity['current_end'])
+    db.session.commit()
+    return True
+
+
 @app.context_processor
 def globals_for_templates(): return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES}
 
@@ -116,6 +163,9 @@ def login_required(role=None):
             if not session.get('user_id'):
                 flash('कृपया पहले लॉगिन करें।','error'); return redirect(url_for('login',next=request.path))
             if role and session.get('role') != role: abort(403)
+            if session.get('role') == 'student' and request.endpoint not in {'payment','payment_verify','payment_status','logout'}:
+                if not billing_is_active(session.get('user_id')):
+                    return redirect(url_for('payment'))
             return fn(*args,**kwargs)
         return wrapped
     return deco
@@ -136,11 +186,37 @@ def home():
 def register():
     if request.method=='POST':
         name=request.form.get('name','').strip(); email=request.form.get('email','').strip().lower(); pw=request.form.get('password',''); cn=request.form.get('class_no','')
-        if not name or len(name)>120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+',email) or len(pw)<8 or cn not in [str(x) for x in CLASSES]: flash('सही जानकारी भरें। पासवर्ड कम से कम 8 अक्षरों का हो।','error')
-        elif User.query.filter_by(email=email).first(): flash('यह ईमेल पहले से रजिस्टर है।','error')
+        if not name or len(name)>120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+',email) or len(pw)<8 or cn not in [str(x) for x in CLASSES]:
+            flash('सही जानकारी भरें। पासवर्ड कम से कम 8 अक्षरों का हो।','error')
+        elif User.query.filter_by(email=email).first():
+            flash('यह ईमेल पहले से रजिस्टर है।','error')
         else:
-            db.session.add(User(name=name,email=email,password=generate_password_hash(pw),role='student',class_no=int(cn))); db.session.commit()
-            flash('रजिस्ट्रेशन सफल। अब लॉगिन करें।','success'); return redirect(url_for('login'))
+            try:
+                client = razorpay_client()
+                user = User(name=name,email=email,password=generate_password_hash(pw),role='student',class_no=int(cn))
+                db.session.add(user); db.session.commit()
+                # Razorpay's subscription checkout guidance currently supports up to 10 years: 20 six-month cycles.
+                subscription = client.subscription.create(data={
+                    'plan_id': RAZORPAY_PLAN_ID,
+                    'total_count': 20,
+                    'quantity': 1,
+                    'customer_notify': True,
+                    'notes': {'avi_user_id': str(user.id), 'course': 'AVI CLASSES'}
+                })
+                billing = BillingSubscription(user_id=user.id, razorpay_subscription_id=subscription['id'], status=subscription.get('status','created'))
+                db.session.add(billing); db.session.commit()
+                session.clear(); session.permanent=True
+                session.update(user_id=user.id,name=user.name,role=user.role,class_no=user.class_no)
+                flash('अकाउंट बन गया। पढ़ाई शुरू करने के लिए ₹126 की 6 महीने वाली सदस्यता की अनुमति दें।','success')
+                return redirect(url_for('payment'))
+            except Exception as exc:
+                db.session.rollback()
+                # If user row was committed before the gateway call failed, remove only this new account.
+                orphan = User.query.filter_by(email=email).first()
+                if orphan and orphan.role == 'student' and not BillingSubscription.query.filter_by(user_id=orphan.id).first():
+                    db.session.delete(orphan); db.session.commit()
+                app.logger.exception('Razorpay subscription creation failed')
+                flash('अभी भुगतान सेवा उपलब्ध नहीं है। कृपया कुछ देर बाद पुनः प्रयास करें।','error')
     return render_template('register.html')
 
 @app.route('/login',methods=['GET','POST'])
@@ -150,9 +226,87 @@ def login():
         if user and check_password_hash(user.password,request.form.get('password','')):
             session.clear(); session.permanent=True; session.update(user_id=user.id,name=user.name,role=user.role,class_no=user.class_no)
             dest='admin' if user.role=='admin' else 'student'
+            if user.role == 'student' and not billing_is_active(user.id):
+                return redirect(url_for('payment'))
             return redirect(url_for(dest))
         flash('ईमेल या पासवर्ड सही नहीं है।','error')
     return render_template('login.html')
+
+@app.route('/payment')
+@login_required('student')
+def payment():
+    billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
+    if not billing:
+        return redirect(url_for('student'))
+    if billing.status == 'active':
+        return redirect(url_for('student'))
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET or not razorpay:
+        flash('भुगतान सेटअप अधूरा है। कृपया AVI CLASSES Admin से संपर्क करें।','error')
+        return render_template('payment.html', billing=billing, key_id='', checkout_ready=False, current_user_email=User.query.get(session['user_id']).email)
+    return render_template('payment.html', billing=billing, key_id=RAZORPAY_KEY_ID, checkout_ready=True, current_user_email=User.query.get(session['user_id']).email)
+
+
+@app.route('/payment/verify', methods=['POST'])
+@login_required('student')
+def payment_verify():
+    data = request.get_json(silent=True) or request.form
+    payment_id = str(data.get('razorpay_payment_id','')).strip()
+    subscription_id = str(data.get('razorpay_subscription_id','')).strip()
+    signature = str(data.get('razorpay_signature','')).strip()
+    billing = BillingSubscription.query.filter_by(user_id=session['user_id'], razorpay_subscription_id=subscription_id).first()
+    if not billing or not payment_id or not signature:
+        return jsonify(ok=False, message='भुगतान की जानकारी सही नहीं है।'), 400
+    try:
+        # Razorpay Subscription Checkout signature: HMAC-SHA256(payment_id|subscription_id).
+        expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), f'{payment_id}|{subscription_id}'.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            return jsonify(ok=False, message='भुगतान सत्यापित नहीं हो सका।'), 400
+        remote = razorpay_client().subscription.fetch(subscription_id)
+        set_subscription_state(subscription_id, remote.get('status','created'), remote)
+        if remote.get('status') == 'active':
+            return jsonify(ok=True, active=True, redirect=url_for('student'))
+        return jsonify(ok=True, active=False, redirect=url_for('payment'), message='आपकी AutoPay अनुमति मिल गई है। भुगतान सक्रिय होने की पुष्टि का इंतजार है।')
+    except Exception:
+        app.logger.exception('Razorpay subscription verification failed')
+        return jsonify(ok=False, message='भुगतान की पुष्टि अभी नहीं हो सकी। कृपया थोड़ी देर बाद फिर देखें।'), 503
+
+
+@app.route('/payment/status')
+@login_required('student')
+def payment_status():
+    billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
+    if not billing or billing.status == 'active':
+        return redirect(url_for('student'))
+    return redirect(url_for('payment'))
+
+
+@app.route('/webhooks/razorpay', methods=['POST'])
+@csrf.exempt
+def razorpay_webhook():
+    if not RAZORPAY_WEBHOOK_SECRET:
+        return jsonify(ok=False, message='Webhook secret not configured'), 503
+    raw_body = request.get_data(cache=True)
+    received = request.headers.get('X-Razorpay-Signature','')
+    expected = hmac.new(RAZORPAY_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    if not received or not hmac.compare_digest(expected, received):
+        abort(400)
+    payload = request.get_json(silent=True) or {}
+    event = payload.get('event','')
+    entity = ((payload.get('payload') or {}).get('subscription') or {}).get('entity') or {}
+    subscription_id = entity.get('id')
+    if subscription_id:
+        status_map = {
+            'subscription.activated': 'active',
+            'subscription.charged': 'active',
+            'subscription.pending': 'pending',
+            'subscription.halted': 'halted',
+            'subscription.cancelled': 'cancelled',
+            'subscription.completed': 'completed',
+        }
+        if event in status_map:
+            set_subscription_state(subscription_id, status_map[event], entity)
+    return jsonify(ok=True)
+
 
 @app.route('/logout',methods=['POST'])
 @login_required()

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="narrow">
+  <section class="form-card">
+    <div class="eyebrow">AVI CLASSES MEMBERSHIP</div>
+    <h2>6 महीने की सदस्यता</h2>
+    <p style="font-size:1.35rem;font-weight:800;margin:.4rem 0">₹126 <span style="font-size:.9rem;font-weight:500;color:#64748b">/ हर 6 महीने</span></p>
+    <p>पढ़ाई शुरू करने के लिए Razorpay पर अपनी सदस्यता और AutoPay की अनुमति पूरी करें। अगली किस्त हर 6 महीने में तभी ली जाएगी जब आप भुगतान सेवा में mandate/AutoPay को स्वयं मंजूरी देंगे।</p>
+    {% if checkout_ready %}
+      <input type="hidden" id="csrf-token" value="{{ csrf_token() }}">
+      <button class="btn full" id="pay-button" type="button">₹126 की सदस्यता शुरू करें</button>
+      <p id="payment-message" class="form-foot" role="status">यह Test Mode है। अभी वास्तविक पैसे नहीं कटेंगे।</p>
+      <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+      <script>
+      document.getElementById('pay-button').addEventListener('click', function () {
+        const button = this;
+        const message = document.getElementById('payment-message');
+        button.disabled = true;
+        message.textContent = 'Razorpay Checkout खोला जा रहा है…';
+        const options = {
+          key: {{ key_id|tojson }},
+          subscription_id: {{ billing.razorpay_subscription_id|tojson }},
+          name: 'AVI CLASSES',
+          description: '₹126 / हर 6 महीने',
+          prefill: { name: {{ session.get('name','')|tojson }}, email: {{ current_user_email|tojson }} },
+          theme: { color: '#4338ca' },
+          handler: async function (response) {
+            message.textContent = 'भुगतान की पुष्टि की जा रही है…';
+            try {
+              const result = await fetch({{ url_for('payment_verify')|tojson }}, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','X-CSRFToken':document.getElementById('csrf-token').value},
+                body: JSON.stringify(response)
+              });
+              const data = await result.json();
+              if (data.ok && data.active) {
+                message.textContent = 'सदस्यता सक्रिय हो गई।';
+                window.location.href = data.redirect;
+              } else if (data.ok) {
+                message.textContent = data.message || 'अनुमति मिल गई है। सक्रिय होने की पुष्टि का इंतजार करें।';
+                button.disabled = false;
+              } else {
+                message.textContent = data.message || 'पुष्टि नहीं हो सकी। कृपया फिर प्रयास करें।';
+                button.disabled = false;
+              }
+            } catch (e) {
+              message.textContent = 'नेटवर्क समस्या। पेज रीफ्रेश करके सदस्यता स्थिति जाँचें।';
+              button.disabled = false;
+            }
+          },
+          modal: { ondismiss: function () { button.disabled = false; message.textContent = 'आपने Checkout बंद किया है। सदस्यता पूरी करने के लिए फिर बटन दबाएँ।'; } }
+        };
+        const checkout = new Razorpay(options);
+        checkout.on('payment.failed', function () {
+          message.textContent = 'भुगतान पूरा नहीं हुआ। कृपया फिर प्रयास करें।';
+          button.disabled = false;
+        });
+        checkout.open();
+      });
+      </script>
+    {% else %}
+      <p class="flash error">भुगतान सेवा अभी तैयार नहीं है। कृपया Admin से संपर्क करें।</p>
+    {% endif %}
+    <p class="form-foot">AutoPay आपकी अनुमति से ही सक्रिय होगा। आप अपने UPI ऐप/बैंक में mandate की शर्तें देखकर मंजूरी दें।</p>
+  </section>
+</div>
+{% endblock %}

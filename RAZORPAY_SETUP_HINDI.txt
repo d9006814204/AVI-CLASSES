@@ -1,0 +1,45 @@
+AVI CLASSES – Razorpay Subscription Setup (TEST MODE)
+
+Plan configured in Razorpay Dashboard:
+- Plan ID: plan_TwkTkdtUQrO23M
+- Amount: INR 126
+- Frequency: Every 6 months
+
+IMPORTANT
+- This integration uses Razorpay Subscriptions and requires the student's explicit authorisation/mandate in Checkout.
+- Test API keys only: test transactions do not debit real money.
+- Do not put API secrets in GitHub, HTML, JavaScript, screenshots, or chat.
+- Existing students already in the database and without a BillingSubscription row remain grandfathered. Only newly registered students are asked to subscribe.
+- New subscriptions are configured for 20 six-month billing cycles (10 years). A student can stop recurring payments by cancelling the mandate/subscription through the available Razorpay/UPI controls; do not promise an unlimited term.
+
+RENDER ENVIRONMENT VARIABLES
+Keep existing ADMIN_PASSWORD and DATABASE_URL unchanged. Add/update:
+1. RAZORPAY_KEY_ID = current TEST Key ID from Razorpay Dashboard
+2. RAZORPAY_KEY_SECRET = current TEST Key Secret from Razorpay Dashboard
+3. RAZORPAY_WEBHOOK_SECRET = a new secret string created when configuring the Razorpay webhook (choose a strong random value and use the same value in Render)
+
+The Plan ID is set as a non-secret fallback in app.py. It can optionally be configured as RAZORPAY_PLAN_ID.
+
+RAZORPAY TEST WEBHOOK
+After the updated code is deployed, create a webhook in Razorpay TEST MODE:
+URL: https://avi-classes.onrender.com/webhooks/razorpay
+Secret: the exact value stored in RAZORPAY_WEBHOOK_SECRET on Render
+Subscribe to these events if available:
+- subscription.activated
+- subscription.charged
+- subscription.pending
+- subscription.halted
+- subscription.cancelled
+- subscription.completed
+
+Then redeploy/restart the Render service after saving environment variables.
+
+TESTING
+1. Open https://avi-classes.onrender.com in a private/incognito browser or use a new test email.
+2. Register a new student. The app creates the Razorpay subscription and opens the checkout page.
+3. Complete the TEST authorisation flow using the test payment methods shown in Razorpay's current documentation/dashboard.
+4. Access is enabled only after the server verifies the Checkout signature and Razorpay confirms the subscription is active (webhook or server fetch).
+5. Confirm a renewal/charge event in Razorpay Test Dashboard before enabling live keys.
+
+GO LIVE
+Do not switch to Live Mode until Razorpay account website/app review and required onboarding/KYC are complete, test integration works, and the merchant intentionally approves live billing. Replace test keys with live keys only at that point, and create/configure the webhook separately in Live Mode.
