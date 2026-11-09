@@ -1,0 +1,37 @@
+{% extends 'base.html' %}{% block content %}
+<div class="narrow"><form class="form-card" id="registerForm" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="eyebrow">JOIN THE CLASSROOM</div><h2>विद्यार्थी रजिस्ट्रेशन</h2>
+{% if not otp_pending %}
+<label>पूरा नाम</label><input name="name" required>
+<label>Email</label><input name="email" type="email" required>
+<label>मोबाइल नंबर</label><input name="phone" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" required placeholder="10 अंकों का मोबाइल नंबर">
+<label>Password (कम से कम 8 अक्षर)</label><input name="password" type="password" minlength="8" required>
+<label>कक्षा चुनें</label><select name="class_no" required><option value="">कक्षा चुनें</option>{% for c in classes %}<option value="{{ c }}">कक्षा {{ c }}</option>{% endfor %}</select>
+<button class="btn full">OTP के लिए आगे बढ़ें</button>
+{% else %}
+<h3>मोबाइल OTP सत्यापन</h3><p>आपके दिए मोबाइल नंबर पर OTP भेजें।</p>
+<label>मोबाइल नंबर</label><input id="otpPhone" type="tel" inputmode="numeric" maxlength="10" value="{{ session.get('otp_pending', {}).get('phone','')[2:] }}" readonly>
+<button class="btn full" type="button" id="sendOtp">OTP भेजें</button>
+<div id="otpArea" hidden><label>OTP</label><input id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="OTP दर्ज करें"><button class="btn full" type="button" id="verifyOtp">OTP Verify करके अकाउंट बनाएँ</button><button class="btn full" type="button" id="retryOtp">OTP दोबारा भेजें</button></div>
+<div id="msg91-captcha"></div><p id="otpMessage" role="status"></p>
+{% endif %}
+<p class="form-foot">पहले से अकाउंट है? <a href="{{ url_for('login') }}">लॉगिन करें</a></p></form></div>
+{% if otp_pending %}
+<script>
+(() => {
+ const cfg={{ otp_config|tojson }}; const csrf=document.querySelector('input[name=csrf_token]').value;
+ const phone=document.getElementById('otpPhone'), msg=document.getElementById('otpMessage'); let ready=false, verifiedToken='';
+ const tell=t=>msg.textContent=t;
+ const init=()=>{if(ready || !window.msg91SdkLoaded){tell('OTP सेवा लोड हो रही है, कृपया कुछ सेकंड बाद प्रयास करें।');return;}window.initSendOTP({widgetId:cfg.widget_id,tokenAuth:cfg.widget_token,identifier:'',exposeMethods:true,captchaRenderId:'msg91-captcha',
+ success:d=>{verifiedToken=(d&&(d.message||d.access_token||d.token))||'';},failure:e=>tell('OTP में समस्या: '+(e.message||'फिर प्रयास करें'))});ready=true;};
+ document.getElementById('sendOtp').onclick=()=>{const n=phone.value.replace(/\D/g,'');if(!/^\d{10}$/.test(n)){tell('मोबाइल नंबर सही नहीं है।');return;}init();if(!ready)return;window.sendOtp('91'+n,()=>{document.getElementById('otpArea').hidden=false;tell('OTP भेज दिया गया है।');},e=>tell('OTP नहीं भेजा गया: '+(e.message||'फिर प्रयास करें')));};
+ document.getElementById('retryOtp').onclick=()=>{
+  if(!ready){init();if(!ready)return;}
+  window.retryOtp(null,()=>tell('OTP दोबारा भेज दिया गया है।'),e=>tell('OTP दोबारा नहीं भेजा गया: '+((e&&e.message)||'फिर प्रयास करें')));
+ };
+ document.getElementById('verifyOtp').onclick=()=>{const code=document.getElementById('otpCode').value.trim();window.verifyOtp(code,d=>{const token=(d&&(d.message||d.access_token||d.token))||verifiedToken;if(!token){tell('MSG91 access token नहीं मिला।');return;}
+ fetch('{{ url_for("otp_complete") }}',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({access_token:token,phone:'91'+phone.value.replace(/\D/g,'')})})
+ .then(r=>r.json()).then(x=>{if(x.ok)location.href=x.redirect;else tell(x.message||'सत्यापन विफल');}).catch(()=>tell('नेटवर्क समस्या।'));},e=>tell('गलत OTP या OTP समाप्त।'));};
+})();
+</script><script src="https://verify.msg91.com/otp-provider.js" onload="window.msg91SdkLoaded=true"></script>
+{% endif %}{% endblock %}

@@ -1,4 +1,4 @@
-import os, csv, io, secrets, re, hmac, hashlib
+import os, csv, io, secrets, re, hmac, hashlib, json, urllib.request, urllib.error
 from datetime import datetime, timezone
 from functools import wraps
 from urllib.parse import urlparse
@@ -68,6 +68,26 @@ class LoginThrottle(db.Model):
     failures = db.Column(db.Integer, nullable=False, default=0)
     locked_until = db.Column(db.DateTime)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+class UserPhone(db.Model):
+    # Additive table: does not alter existing User rows or student/question records.
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True, index=True)
+    phone = db.Column(db.String(16), nullable=False, unique=True, index=True)
+    verified_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class PendingRegistration(db.Model):
+    # Temporary server-side storage; password hashes are never put in the browser session.
+    id = db.Column(db.Integer, primary_key=True)
+    nonce = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    class_no = db.Column(db.Integer, nullable=False)
+    phone = db.Column(db.String(16), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
 
 class Question(db.Model):
     id=db.Column(db.Integer,primary_key=True); class_no=db.Column(db.Integer,nullable=False,index=True)
@@ -153,6 +173,59 @@ RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '').strip()
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '').strip()
 RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '').strip()
 
+MSG91_WIDGET_ID = os.environ.get('MSG91_WIDGET_ID', '').strip()
+MSG91_WIDGET_TOKEN = os.environ.get('MSG91_WIDGET_TOKEN', '').strip()
+MSG91_AUTHKEY = os.environ.get('MSG91_AUTHKEY', '').strip()
+ADMIN_PHONE = re.sub(r'\D', '', os.environ.get('ADMIN_PHONE', ''))
+if len(ADMIN_PHONE) == 10: ADMIN_PHONE = '91' + ADMIN_PHONE
+MSG91_VERIFY_URL = 'https://control.msg91.com/api/v5/widget/verifyAccessToken'
+
+def msg91_verify_access_token(access_token, expected_phone):
+    """Verify MSG91's widget-issued access token server-side; never trust browser success alone."""
+    if not (MSG91_AUTHKEY and access_token and expected_phone):
+        return False
+    payload = json.dumps({'authkey': MSG91_AUTHKEY, 'access-token': access_token}).encode('utf-8')
+    req = urllib.request.Request(
+        MSG91_VERIFY_URL, data=payload,
+        headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            result = json.loads(response.read().decode('utf-8'))
+        # MSG91 returns verified user details along with a success status.
+        if not isinstance(result, dict):
+            return False
+        status = str(result.get('type', result.get('status', ''))).lower()
+        if status not in ('success', 'verified', 'true', '200'):
+            return False
+        # Match the verified identifier to the phone being enrolled/authenticated.
+        candidate = result.get('message') or result.get('data') or result
+        if isinstance(candidate, dict):
+            found = candidate.get('identifier') or candidate.get('mobile') or candidate.get('phone') or candidate.get('user')
+        else:
+            found = candidate if isinstance(candidate, str) else None
+        if found:
+            return re.sub(r'\D', '', str(found)).endswith(expected_phone[-10:])
+        # Some MSG91 responses confirm token validity without echoing the identifier.
+        # In that case the widget token is valid; server-side pending phone binding still applies.
+        return True
+    except Exception:
+        app.logger.exception('MSG91 access-token verification failed')
+        return False
+
+def normalize_indian_phone(raw):
+    digits = re.sub(r'\D', '', raw or '')
+    if len(digits) == 10:
+        digits = '91' + digits
+    if len(digits) != 12 or not digits.startswith('91'):
+        return ''
+    return digits
+
+def msg91_template_config():
+    return {'widget_id': MSG91_WIDGET_ID, 'widget_token': MSG91_WIDGET_TOKEN}
+
+
 
 def razorpay_client():
     if not razorpay or not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET or not RAZORPAY_PLAN_ID:
@@ -180,7 +253,7 @@ def set_subscription_state(subscription_id, status, entity=None):
 
 
 @app.context_processor
-def globals_for_templates(): return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES}
+def globals_for_templates(): return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES, 'otp_config': msg91_template_config() if 'msg91_template_config' in globals() else {'widget_id': '', 'widget_token': ''}}
 
 def _login_throttle_key(email):
     # Hash email + client address; do not store raw IP addresses in the throttle table.
@@ -253,67 +326,158 @@ def home():
     recent_items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(3).all()
     return render_template('home.html',total=total,counts=counts,recent_items=recent_items)
 
-@app.route('/register',methods=['GET','POST'])
-def register():
-    if request.method=='POST':
-        name=request.form.get('name','').strip(); email=request.form.get('email','').strip().lower(); pw=request.form.get('password',''); cn=request.form.get('class_no','')
-        if not name or len(name)>120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+',email) or len(pw)<8 or cn not in [str(x) for x in CLASSES]:
-            flash('सही जानकारी भरें। पासवर्ड कम से कम 8 अक्षरों का हो।','error')
-        elif User.query.filter_by(email=email).first():
-            flash('यह ईमेल पहले से रजिस्टर है।','error')
-        else:
-            try:
-                client = razorpay_client()
-                user = User(name=name,email=email,password=generate_password_hash(pw),role='student',class_no=int(cn))
-                db.session.add(user); db.session.commit()
-                # Razorpay's subscription checkout guidance currently supports up to 10 years: 20 six-month cycles.
-                subscription = client.subscription.create(data={
-                    'plan_id': RAZORPAY_PLAN_ID,
-                    'total_count': 20,
-                    'quantity': 1,
-                    'customer_notify': True,
-                    'notes': {'avi_user_id': str(user.id), 'course': 'AVI CLASSES'}
-                })
-                billing = BillingSubscription(user_id=user.id, razorpay_subscription_id=subscription['id'], status=subscription.get('status','created'))
-                db.session.add(billing); db.session.commit()
-                session.clear(); session.permanent=True
-                session.update(user_id=user.id,name=user.name,role=user.role,class_no=user.class_no)
-                flash('अकाउंट बन गया। पढ़ाई शुरू करने के लिए ₹126 की 6 महीने वाली सदस्यता की अनुमति दें।','success')
-                return redirect(url_for('payment'))
-            except Exception as exc:
-                db.session.rollback()
-                # If user row was committed before the gateway call failed, remove only this new account.
-                orphan = User.query.filter_by(email=email).first()
-                if orphan and orphan.role == 'student' and not BillingSubscription.query.filter_by(user_id=orphan.id).first():
-                    db.session.delete(orphan); db.session.commit()
-                app.logger.exception('Razorpay subscription creation failed')
-                flash('अभी भुगतान सेवा उपलब्ध नहीं है। कृपया कुछ देर बाद पुनः प्रयास करें।','error')
-    return render_template('register.html')
 
-@app.route('/login',methods=['GET','POST'])
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        pw = request.form.get('password', '')
+        cn = request.form.get('class_no', '')
+        phone = normalize_indian_phone(request.form.get('phone', ''))
+        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or cn not in [str(x) for x in CLASSES] or not phone:
+            flash('सही जानकारी भरें। मोबाइल नंबर 10 अंकों का और पासवर्ड कम से कम 8 अक्षरों का हो।', 'error')
+        elif User.query.filter_by(email=email).first():
+            flash('यह ईमेल पहले से रजिस्टर है।', 'error')
+        elif UserPhone.query.filter_by(phone=phone).first():
+            flash('यह मोबाइल नंबर पहले से किसी अकाउंट से जुड़ा है।', 'error')
+        elif not (MSG91_WIDGET_ID and MSG91_WIDGET_TOKEN and MSG91_AUTHKEY):
+            flash('OTP सेवा अभी सेटअप नहीं है। कृपया Admin से संपर्क करें।', 'error')
+        else:
+            nonce = secrets.token_urlsafe(32)
+            db.session.add(PendingRegistration(
+                nonce=nonce, name=name, email=email,
+                password_hash=generate_password_hash(pw), class_no=int(cn),
+                phone=phone, expires_at=datetime.utcnow() + __import__('datetime').timedelta(minutes=10)
+            ))
+            db.session.commit()
+            session['otp_pending'] = {
+                'purpose': 'register', 'nonce': nonce, 'phone': phone,
+                'created_at': datetime.utcnow().timestamp()
+            }
+            return render_template('register.html', otp_config=msg91_template_config(), otp_pending=True)
+    return render_template('register.html', otp_config=msg91_template_config(), otp_pending=False)
+
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         key = _login_throttle_key(email)
         if _login_is_locked(key):
             flash('बहुत बार गलत प्रयास हुए हैं। सुरक्षा के लिए 15 मिनट बाद पुनः प्रयास करें।', 'error')
-            return render_template('login.html'), 429
+            return render_template('login.html', otp_config=msg91_template_config()), 429
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, request.form.get('password', '')):
             _login_succeeded(key)
-            session.clear()
-            session.permanent = True
-            session.update(
-                user_id=user.id, name=user.name, role=user.role,
-                class_no=user.class_no, last_seen=datetime.utcnow().timestamp()
-            )
-            dest = 'admin' if user.role == 'admin' else 'student'
-            if user.role == 'student' and not billing_is_active(user.id):
-                return redirect(url_for('payment'))
-            return redirect(url_for(dest))
+            phone_row = UserPhone.query.filter_by(user_id=user.id).first()
+            if user.role == 'admin':
+                phone = ADMIN_PHONE
+                if not phone:
+                    flash('Admin OTP मोबाइल नंबर Render में ADMIN_PHONE सेट होने के बाद चालू होगा।', 'error')
+                    return render_template('login.html', otp_config=msg91_template_config())
+            else:
+                phone = phone_row.phone if phone_row else ''
+            session['otp_pending'] = {
+                'purpose': 'login' if phone else 'enroll_existing',
+                'user_id': user.id, 'phone': phone,
+                'email': user.email, 'created_at': datetime.utcnow().timestamp()
+            }
+            return render_template('login.html', otp_config=msg91_template_config(),
+                                   otp_pending=True, needs_phone=not bool(phone),
+                                   pending_phone=phone)
         _login_failed(key)
         flash('ईमेल या पासवर्ड सही नहीं है।', 'error')
-    return render_template('login.html')
+    return render_template('login.html', otp_config=msg91_template_config(), otp_pending=False)
+
+
+@app.route('/otp/complete', methods=['POST'])
+def otp_complete():
+    pending = session.get('otp_pending') or {}
+    if not pending or datetime.utcnow().timestamp() - float(pending.get('created_at', 0)) > 600:
+        session.pop('otp_pending', None)
+        return jsonify(ok=False, message='OTP प्रक्रिया समाप्त हो गई। दोबारा शुरू करें।'), 400
+    data = request.get_json(silent=True) or {}
+    access_token = str(data.get('access_token', '')).strip()
+    phone = normalize_indian_phone(data.get('phone') or pending.get('phone') or '')
+    if not access_token or not phone:
+        return jsonify(ok=False, message='मोबाइल नंबर और OTP verification जरूरी है।'), 400
+    if pending.get('phone') and pending['phone'] != phone:
+        return jsonify(ok=False, message='मोबाइल नंबर मेल नहीं खाता।'), 400
+    if not msg91_verify_access_token(access_token, phone):
+        return jsonify(ok=False, message='MSG91 OTP सत्यापन नहीं हो सका। दोबारा प्रयास करें।'), 401
+
+    purpose = pending.get('purpose')
+    if purpose == 'register':
+        staged = PendingRegistration.query.filter_by(nonce=pending.get('nonce')).first()
+        if not staged or staged.expires_at < datetime.utcnow():
+            if staged: db.session.delete(staged); db.session.commit()
+            session.pop('otp_pending', None)
+            return jsonify(ok=False, message='रजिस्ट्रेशन की समय-सीमा समाप्त। दोबारा शुरू करें।'), 400
+        if User.query.filter_by(email=staged.email).first() or UserPhone.query.filter_by(phone=phone).first():
+            db.session.delete(staged); db.session.commit()
+            session.pop('otp_pending', None)
+            return jsonify(ok=False, message='ईमेल या मोबाइल पहले से रजिस्टर है।'), 409
+        try:
+            user = User(name=staged.name, email=staged.email,
+                        password=staged.password_hash, role='student',
+                        class_no=int(staged.class_no))
+            db.session.add(user)
+            db.session.flush()
+            db.session.add(UserPhone(user_id=user.id, phone=phone))
+            db.session.delete(staged)
+            db.session.commit()
+            session.pop('otp_pending', None)
+            session.clear()
+            session.permanent = True
+            session.update(user_id=user.id, name=user.name, role=user.role,
+                           class_no=user.class_no, last_seen=datetime.utcnow().timestamp())
+            try:
+                client = razorpay_client()
+                subscription = client.subscription.create(data={
+                    'plan_id': RAZORPAY_PLAN_ID, 'total_count': 20, 'quantity': 1,
+                    'customer_notify': True, 'notes': {'avi_user_id': str(user.id), 'course': 'AVI CLASSES'}
+                })
+                db.session.add(BillingSubscription(user_id=user.id,
+                    razorpay_subscription_id=subscription['id'],
+                    status=subscription.get('status', 'created')))
+                db.session.commit()
+                return jsonify(ok=True, redirect=url_for('payment'))
+            except Exception:
+                app.logger.exception('Razorpay subscription creation failed after verified registration')
+                return jsonify(ok=True, redirect=url_for('payment'),
+                               message='अकाउंट बन गया; भुगतान सेवा अभी उपलब्ध नहीं है।'), 200
+        except Exception:
+            db.session.rollback()
+            app.logger.exception('Verified registration failed')
+            return jsonify(ok=False, message='रजिस्ट्रेशन पूरा नहीं हो सका।'), 500
+
+    user = db.session.get(User, int(pending.get('user_id', 0)))
+    if not user:
+        session.pop('otp_pending', None)
+        return jsonify(ok=False, message='अकाउंट नहीं मिला।'), 404
+    if purpose == 'enroll_existing':
+        if user.role != 'student' or UserPhone.query.filter_by(phone=phone).first():
+            return jsonify(ok=False, message='यह मोबाइल नंबर किसी अन्य अकाउंट से जुड़ा है।'), 409
+        db.session.add(UserPhone(user_id=user.id, phone=phone))
+        db.session.commit()
+    elif purpose == 'login' and user.role == 'admin':
+        if not ADMIN_PHONE or phone != ADMIN_PHONE:
+            return jsonify(ok=False, message='Admin मोबाइल नंबर सही नहीं है।'), 403
+    elif purpose == 'login':
+        row = UserPhone.query.filter_by(user_id=user.id).first()
+        if not row or row.phone != phone:
+            return jsonify(ok=False, message='मोबाइल नंबर मेल नहीं खाता।'), 403
+
+    session.pop('otp_pending', None)
+    session.clear()
+    session.permanent = True
+    session.update(user_id=user.id, name=user.name, role=user.role,
+                   class_no=user.class_no, last_seen=datetime.utcnow().timestamp())
+    if user.role == 'student' and not billing_is_active(user.id):
+        return jsonify(ok=True, redirect=url_for('payment'))
+    return jsonify(ok=True, redirect=url_for('admin' if user.role == 'admin' else 'student'))
+
 
 @app.route('/payment')
 @login_required('student')
