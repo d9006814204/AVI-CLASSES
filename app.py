@@ -28,8 +28,9 @@ app.config.update(
     MAX_CONTENT_LENGTH=50 * 1024 * 1024,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE','0') == '1',
-    PERMANENT_SESSION_LIFETIME=60*60*8,
+    SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE','1') == '1',
+    SESSION_COOKIE_NAME='avi_classes_session',
+    PERMANENT_SESSION_LIFETIME=60*60*4,
 )
 raw_db = os.environ.get('DATABASE_URL','').strip()
 if raw_db:
@@ -41,6 +42,17 @@ else:
 
 db = SQLAlchemy(app)
 csrf = CSRFProtect(app)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    if request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https':
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
+
 CLASSES = list(range(1,11))
 SUBJECTS = ['Hindi','English','Mathematics','Science','Social Science','EVS','General Knowledge']
 
@@ -49,6 +61,14 @@ class User(db.Model):
     email=db.Column(db.String(255),unique=True,nullable=False,index=True); password=db.Column(db.String(255),nullable=False)
     role=db.Column(db.String(20),nullable=False,default='student'); class_no=db.Column(db.Integer)
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
+class LoginThrottle(db.Model):
+    # Additive security table; existing users, questions and attempts are untouched.
+    id = db.Column(db.Integer, primary_key=True)
+    throttle_key = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    failures = db.Column(db.Integer, nullable=False, default=0)
+    locked_until = db.Column(db.DateTime)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
 class Question(db.Model):
     id=db.Column(db.Integer,primary_key=True); class_no=db.Column(db.Integer,nullable=False,index=True)
     subject=db.Column(db.String(80),nullable=False,index=True); chapter=db.Column(db.String(160),default='')
@@ -162,13 +182,57 @@ def set_subscription_state(subscription_id, status, entity=None):
 @app.context_processor
 def globals_for_templates(): return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES}
 
+def _login_throttle_key(email):
+    # Hash email + client address; do not store raw IP addresses in the throttle table.
+    raw = f"{email.lower().strip()}|{request.remote_addr or 'unknown'}"
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+def _login_is_locked(key):
+    row = LoginThrottle.query.filter_by(throttle_key=key).first()
+    now = datetime.utcnow()
+    if row and row.locked_until and row.locked_until > now:
+        return True
+    if row and row.locked_until and row.locked_until <= now:
+        row.failures = 0
+        row.locked_until = None
+        db.session.commit()
+    return False
+
+def _login_failed(key):
+    now = datetime.utcnow()
+    row = LoginThrottle.query.filter_by(throttle_key=key).first()
+    if row is None:
+        row = LoginThrottle(throttle_key=key, failures=0)
+        db.session.add(row)
+    row.failures += 1
+    row.updated_at = now
+    if row.failures >= 5:
+        row.locked_until = now + __import__('datetime').timedelta(minutes=15)
+    db.session.commit()
+
+def _login_succeeded(key):
+    LoginThrottle.query.filter_by(throttle_key=key).delete()
+    db.session.commit()
+
 def login_required(role=None):
     def deco(fn):
         @wraps(fn)
         def wrapped(*args,**kwargs):
             if not session.get('user_id'):
                 flash('कृपया पहले लॉगिन करें।','error'); return redirect(url_for('login',next=request.path))
-            if role and session.get('role') != role: abort(403)
+            current_user = db.session.get(User, session.get('user_id'))
+            if not current_user or current_user.role != session.get('role'):
+                session.clear()
+                abort(403)
+            if role and current_user.role != role: abort(403)
+            now_ts = datetime.utcnow().timestamp()
+            idle_limit = 30 * 60 if current_user.role == 'admin' else 4 * 60 * 60
+            last_seen = float(session.get('last_seen', now_ts))
+            if now_ts - last_seen > idle_limit:
+                session.clear()
+                flash('सुरक्षा के लिए आपका सत्र समाप्त हुआ। कृपया फिर लॉगिन करें।', 'error')
+                return redirect(url_for('login'))
+            session['last_seen'] = now_ts
             if session.get('role') == 'student' and request.endpoint not in {'payment','payment_verify','payment_status','logout'}:
                 if not billing_is_active(session.get('user_id')):
                     return redirect(url_for('payment'))
@@ -228,15 +292,27 @@ def register():
 
 @app.route('/login',methods=['GET','POST'])
 def login():
-    if request.method=='POST':
-        email=request.form.get('email','').strip().lower(); user=User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password,request.form.get('password','')):
-            session.clear(); session.permanent=True; session.update(user_id=user.id,name=user.name,role=user.role,class_no=user.class_no)
-            dest='admin' if user.role=='admin' else 'student'
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        key = _login_throttle_key(email)
+        if _login_is_locked(key):
+            flash('बहुत बार गलत प्रयास हुए हैं। सुरक्षा के लिए 15 मिनट बाद पुनः प्रयास करें।', 'error')
+            return render_template('login.html'), 429
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, request.form.get('password', '')):
+            _login_succeeded(key)
+            session.clear()
+            session.permanent = True
+            session.update(
+                user_id=user.id, name=user.name, role=user.role,
+                class_no=user.class_no, last_seen=datetime.utcnow().timestamp()
+            )
+            dest = 'admin' if user.role == 'admin' else 'student'
             if user.role == 'student' and not billing_is_active(user.id):
                 return redirect(url_for('payment'))
             return redirect(url_for(dest))
-        flash('ईमेल या पासवर्ड सही नहीं है।','error')
+        _login_failed(key)
+        flash('ईमेल या पासवर्ड सही नहीं है।', 'error')
     return render_template('login.html')
 
 @app.route('/payment')
