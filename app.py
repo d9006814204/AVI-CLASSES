@@ -186,7 +186,8 @@ def valid_question_form(data):
 def home():
     total=Question.query.filter_by(published=True).count()
     counts={r[0]:r[1] for r in db.session.query(Question.class_no,func.count(Question.id)).filter_by(published=True).group_by(Question.class_no).all()}
-    return render_template('home.html',total=total,counts=counts)
+    recent_items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(3).all()
+    return render_template('home.html',total=total,counts=counts,recent_items=recent_items)
 
 @app.route('/register',methods=['GET','POST'])
 def register():
@@ -584,11 +585,25 @@ def change_password():
         else: user.password=generate_password_hash(new); db.session.commit(); flash('पासवर्ड बदल गया।','success'); return redirect(url_for('admin' if user.role=='admin' else 'student'))
     return render_template('change_password.html')
 
+
+@app.route('/about')
+def about_page():
+    return render_template('about.html', title='About | AVI CLASSES')
+
+@app.route('/help')
+def help_page():
+    return render_template('help.html', title='Help & Support | AVI CLASSES')
+
+@app.route('/notifications')
+def notifications_page():
+    items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(30).all()
+    return render_template('notifications.html', items=items, title='Notifications | AVI CLASSES')
+
 @app.route('/manifest.webmanifest')
-def manifest(): return jsonify(name='AVI CLASS TR-04',short_name='AVI TR-04',start_url='/',display='standalone',background_color='#f6f7fb',theme_color='#4338ca',icons=[{'src':'/static/icon.svg','sizes':'any','type':'image/svg+xml','purpose':'any maskable'}])
+def manifest(): return jsonify(name='AVI CLASSES',short_name='AVI CLASSES',start_url='/',display='standalone',background_color='#f6f8ff',theme_color='#071d68',icons=[{'src':'/static/icon.svg','sizes':'any','type':'image/svg+xml','purpose':'any maskable'}])
 @app.route('/service-worker.js')
 def service_worker():
-    resp=make_response("const CACHE='avi-class-tr04-v1'; self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','/static/style.css','/static/icon.svg'])))); self.addEventListener('activate',e=>e.waitUntil(self.clients.claim())); self.addEventListener('fetch',e=>{if(e.request.method==='GET' && new URL(e.request.url).origin===location.origin){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));}});"); resp.headers['Content-Type']='application/javascript'; return resp
+    resp=make_response("const CACHE='avi-classes-premium-v2'; self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','/static/style.css','/static/icon.svg'])))); self.addEventListener('activate',e=>e.waitUntil(self.clients.claim())); self.addEventListener('fetch',e=>{if(e.request.method==='GET' && new URL(e.request.url).origin===location.origin){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));}});"); resp.headers['Content-Type']='application/javascript'; return resp
 @app.route('/health')
 def health(): return {'status':'ok','app':'AVI CLASS TR-04','database':'configured'}
 
