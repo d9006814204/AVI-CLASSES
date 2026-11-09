@@ -10,7 +10,7 @@
 <label>मोबाइल नंबर</label><input id="otpPhone" type="tel" inputmode="numeric" maxlength="10" value="{{ pending_phone[2:] if pending_phone else '' }}" {% if not needs_phone %}readonly{% endif %} placeholder="10 अंकों का मोबाइल नंबर" required>
 <button class="btn full" type="button" id="sendOtp">OTP भेजें</button>
 <div id="otpArea" hidden><label>OTP</label><input id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="OTP दर्ज करें"><button class="btn full" type="button" id="verifyOtp">OTP Verify करें</button><button class="btn full" type="button" id="retryOtp">OTP दोबारा भेजें</button></div>
-<p id="otpMessage" role="status"></p>
+<div id="msg91-captcha"></div><p id="otpMessage" role="status"></p>
 {% endif %}
 <p class="form-foot">नया अकाउंट? <a href="{{ url_for('register') }}">रजिस्ट्रेशन करें</a></p></form></div>
 {% if otp_pending %}
@@ -20,7 +20,7 @@
  const phone=document.getElementById('otpPhone'), msg=document.getElementById('otpMessage');
  let ready=false, verifiedToken='';
  const tell=t=>msg.textContent=t;
- const init=()=>{ if(ready || !window.msg91SdkLoaded){tell('OTP सेवा लोड हो रही है, कृपया कुछ सेकंड बाद प्रयास करें।');return;} const c={widgetId:cfg.widget_id,tokenAuth:cfg.widget_token,identifier:'',exposeMethods:true,
+ const init=()=>{ if(ready || !window.msg91SdkLoaded){tell('OTP सेवा लोड हो रही है, कृपया कुछ सेकंड बाद प्रयास करें।');return;} const c={widgetId:cfg.widget_id,tokenAuth:cfg.widget_token,identifier:'',exposeMethods:true,captchaRenderId:'msg91-captcha',
  success:d=>{verifiedToken=(d && (d.message || d.access_token || d.token))||'';},
  failure:e=>tell('OTP में समस्या: '+(e.message||'फिर प्रयास करें'))};
  window.initSendOTP(c); ready=true; };
