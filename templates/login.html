@@ -19,31 +19,17 @@
   <section class="avi-login-main">
     <form class="avi-login-card" id="loginForm" method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% if not otp_pending %}
-        <div class="avi-welcome-mark">✦</div><h2>Welcome <span>Back!</span></h2>
-        <p class="avi-login-sub">Please login to access your <b>AVI CLASSES</b> account.</p>
-        <label for="loginEmail">✉ &nbsp; Registered Email</label>
-        <div class="avi-input-wrap"><span>♙</span><input id="loginEmail" name="email" type="email" autocomplete="username" required placeholder="अपना रजिस्टर ईमेल डालें"></div>
-        <label for="loginPassword">▣ &nbsp; Password</label>
-        <div class="avi-input-wrap"><span>▣</span><input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="अपना पासवर्ड डालें"><button class="avi-eye" type="button" aria-label="पासवर्ड दिखाएँ" onclick="const p=document.getElementById('loginPassword');p.type=p.type==='password'?'text':'password'">◉</button></div>
-        <div class="avi-login-options"><label class="avi-remember"><input type="checkbox" name="remember" checked> Remember me</label><a href="{{ url_for('help_page') }}">Forgot Password?</a></div>
-        <button class="avi-login-submit" type="submit">Login <span>➜</span></button>
-        <div class="avi-or"><span></span>OR<span></span></div>
-        <a class="avi-register-link" href="{{ url_for('register') }}"><b>＋</b> Create New Account <span>(Register)</span></a>
-      {% else %}
-        <div class="avi-welcome-mark">✓</div><h2>Verify <span>OTP</span></h2>
-        <p class="avi-login-sub">आपके मोबाइल पर भेजे गए OTP से लॉगिन पूरा करें।</p>
-        <label for="otpPhone">☎ &nbsp; मोबाइल नंबर</label>
-        <div class="avi-input-wrap"><span>+91</span><input id="otpPhone" type="tel" inputmode="numeric" maxlength="10" value="{{ pending_phone[2:] if pending_phone else '' }}" {% if not needs_phone %}readonly{% endif %} placeholder="10 अंकों का मोबाइल नंबर" required></div>
-        <button class="avi-login-submit" type="button" id="sendOtp">OTP भेजें <span>➜</span></button>
-        <div id="otpArea" hidden><label for="otpCode">OTP दर्ज करें</label><div class="avi-input-wrap"><span>✉</span><input id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 अंकों का OTP"></div><button class="avi-login-submit" type="button" id="verifyOtp">Verify &amp; Login <span>➜</span></button><button class="avi-resend" type="button" id="retryOtp">OTP दोबारा भेजें</button></div>
-        <div id="msg91-captcha"></div><p id="otpMessage" class="avi-otp-message" role="status"></p>
-      {% endif %}
+      <div class="avi-welcome-mark">✦</div><h2>Welcome <span>Back!</span></h2>
+      <p class="avi-login-sub">Please login to access your <b>AVI CLASSES</b> account.</p>
+      <label for="loginEmail">✉ &nbsp; Registered Email</label>
+      <div class="avi-input-wrap"><span>♙</span><input id="loginEmail" name="email" type="email" autocomplete="username" required placeholder="अपना रजिस्टर ईमेल डालें"></div>
+      <label for="loginPassword">▣ &nbsp; Password</label>
+      <div class="avi-input-wrap"><span>▣</span><input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="अपना पासवर्ड डालें"><button class="avi-eye" type="button" aria-label="पासवर्ड दिखाएँ" onclick="const p=document.getElementById('loginPassword');p.type=p.type==='password'?'text':'password'">◉</button></div>
+      <div class="avi-login-options"><label class="avi-remember"><input type="checkbox" name="remember" checked> Remember me</label><a href="{{ url_for('forgot_password') }}">Forgot Password?</a></div>
+      <button class="avi-login-submit" type="submit">Login <span>➜</span></button>
+      <div class="avi-or"><span></span>OR<span></span></div>
+      <a class="avi-register-link" href="{{ url_for('register') }}"><b>＋</b> Create New Account <span>(Register)</span></a>
     </form>
   </section>
 </div>
-{% if otp_pending %}
-<script>
-(() => {const cfg={{ otp_config|tojson }};const csrf=document.querySelector('input[name=csrf_token]').value;const phone=document.getElementById('otpPhone'),msg=document.getElementById('otpMessage');let ready=false,verifiedToken='';const tell=t=>msg.textContent=t;const init=()=>{if(ready||!window.msg91SdkLoaded){tell('OTP सेवा लोड हो रही है, कुछ सेकंड बाद प्रयास करें।');return;}window.initSendOTP({widgetId:cfg.widget_id,tokenAuth:cfg.widget_token,identifier:'',exposeMethods:true,captchaRenderId:'msg91-captcha',success:d=>{verifiedToken=(d&&(d.message||d.access_token||d.token))||'';},failure:e=>tell('OTP में समस्या: '+(e.message||'फिर प्रयास करें'))});ready=true;};document.getElementById('sendOtp').onclick=()=>{const n=phone.value.replace(/\D/g,'');if(!/^\d{10}$/.test(n)){tell('10 अंकों का मोबाइल नंबर डालें।');return;}init();if(!ready)return;window.sendOtp('91'+n,()=>{document.getElementById('otpArea').hidden=false;tell('OTP भेज दिया गया है।');},e=>tell('OTP नहीं भेजा गया: '+(e.message||'फिर प्रयास करें')));};document.getElementById('retryOtp').onclick=()=>{if(!ready){init();if(!ready)return;}window.retryOtp(null,()=>tell('OTP दोबारा भेज दिया गया है।'),e=>tell('OTP दोबारा नहीं भेजा गया: '+((e&&e.message)||'फिर प्रयास करें')));};document.getElementById('verifyOtp').onclick=()=>{const code=document.getElementById('otpCode').value.trim();if(!code){tell('OTP दर्ज करें।');return;}window.verifyOtp(code,d=>{const token=(d&&(d.message||d.access_token||d.token))||verifiedToken;if(!token){tell('MSG91 access token नहीं मिला।');return;}fetch('{{ url_for("otp_complete") }}',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({access_token:token,phone:'91'+phone.value.replace(/\D/g,'')})}).then(r=>r.json()).then(x=>{if(x.ok)location.href=x.redirect;else tell(x.message||'सत्यापन विफल');}).catch(()=>tell('नेटवर्क समस्या।'));},()=>tell('गलत OTP या OTP समाप्त।'));};})();
-</script><script src="https://verify.msg91.com/otp-provider.js" onload="window.msg91SdkLoaded=true"></script>
-{% endif %}{% endblock %}
+{% endblock %}
