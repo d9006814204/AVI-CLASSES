@@ -54,10 +54,3 @@ body.avi-student-page { background:#f5f6ff; }
 .avi-student-page > main.container { max-width:none; width:100%; margin:0; padding:0; }
 .avi-student-page .avi-dashboard { width:100%; min-height:100vh; }
 @media (min-width:761px) { .avi-student-page .avi-dash-sidebar { position:sticky; top:0; height:100vh; overflow-y:auto; } }
-
-/* Public home uses the same AVI dashboard design */
-body.avi-home-page{background:#f5f6ff}
-.avi-home-page>.site-header,.avi-home-page>.main-nav,.avi-home-page>.site-footer{display:none!important}
-.avi-home-page>main.container{max-width:none;width:100%;margin:0;padding:0}
-.avi-home-page .avi-dashboard{width:100%;min-height:100vh}
-@media(min-width:761px){.avi-home-page .avi-dash-sidebar{position:sticky;top:0;height:100vh;overflow-y:auto}}

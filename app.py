@@ -324,10 +324,7 @@ def home():
     total=Question.query.filter_by(published=True).count()
     counts={r[0]:r[1] for r in db.session.query(Question.class_no,func.count(Question.id)).filter_by(published=True).group_by(Question.class_no).all()}
     recent_items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(3).all()
-    subjects=db.session.query(Question.subject,func.count(Question.id).label('n')).filter_by(published=True).group_by(Question.subject).order_by(Question.subject).all()
-    attempts=[]
-    courses=LearningItem.query.filter_by(category='courses',published=True).all()
-    return render_template('home.html',total=total,counts=counts,recent_items=recent_items,subjects=subjects,attempts=attempts,courses=courses)
+    return render_template('home.html',total=total,counts=counts,recent_items=recent_items)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -364,27 +361,34 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Normal login uses email/password only; OTP is reserved for registration and password reset."""
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         key = _login_throttle_key(email)
         if _login_is_locked(key):
             flash('बहुत बार गलत प्रयास हुए हैं। सुरक्षा के लिए 15 मिनट बाद पुनः प्रयास करें।', 'error')
-            return render_template('login.html'), 429
+            return render_template('login.html', otp_config=msg91_template_config()), 429
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, request.form.get('password', '')):
             _login_succeeded(key)
-            session.pop('otp_pending', None)
-            session.clear()
-            session.permanent = True
-            session.update(user_id=user.id, name=user.name, role=user.role,
-                           class_no=user.class_no, last_seen=datetime.utcnow().timestamp())
-            if user.role == 'student' and not billing_is_active(user.id):
-                return redirect(url_for('payment'))
-            return redirect(url_for('admin' if user.role == 'admin' else 'student'))
+            phone_row = UserPhone.query.filter_by(user_id=user.id).first()
+            if user.role == 'admin':
+                phone = ADMIN_PHONE
+                if not phone:
+                    flash('Admin OTP मोबाइल नंबर Render में ADMIN_PHONE सेट होने के बाद चालू होगा।', 'error')
+                    return render_template('login.html', otp_config=msg91_template_config())
+            else:
+                phone = phone_row.phone if phone_row else ''
+            session['otp_pending'] = {
+                'purpose': 'login' if phone else 'enroll_existing',
+                'user_id': user.id, 'phone': phone,
+                'email': user.email, 'created_at': datetime.utcnow().timestamp()
+            }
+            return render_template('login.html', otp_config=msg91_template_config(),
+                                   otp_pending=True, needs_phone=not bool(phone),
+                                   pending_phone=phone)
         _login_failed(key)
         flash('ईमेल या पासवर्ड सही नहीं है।', 'error')
-    return render_template('login.html')
+    return render_template('login.html', otp_config=msg91_template_config(), otp_pending=False)
 
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
