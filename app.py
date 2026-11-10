@@ -324,7 +324,10 @@ def home():
     total=Question.query.filter_by(published=True).count()
     counts={r[0]:r[1] for r in db.session.query(Question.class_no,func.count(Question.id)).filter_by(published=True).group_by(Question.class_no).all()}
     recent_items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(3).all()
-    return render_template('home.html',total=total,counts=counts,recent_items=recent_items)
+    subjects=db.session.query(Question.subject,func.count(Question.id).label('n')).filter_by(published=True).group_by(Question.subject).order_by(Question.subject).all()
+    attempts=[]
+    courses=LearningItem.query.filter_by(category='courses',published=True).all()
+    return render_template('home.html',total=total,counts=counts,recent_items=recent_items,subjects=subjects,attempts=attempts,courses=courses)
 
 
 @app.route('/register', methods=['GET', 'POST'])
