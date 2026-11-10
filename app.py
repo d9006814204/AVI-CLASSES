@@ -324,7 +324,10 @@ def home():
     total=Question.query.filter_by(published=True).count()
     counts={r[0]:r[1] for r in db.session.query(Question.class_no,func.count(Question.id)).filter_by(published=True).group_by(Question.class_no).all()}
     recent_items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(3).all()
-    return render_template('home.html',total=total,counts=counts,recent_items=recent_items)
+    subjects=db.session.query(Question.subject,func.count(Question.id).label('n')).filter_by(published=True).group_by(Question.subject).order_by(Question.subject).all()
+    attempts=[]
+    courses=LearningItem.query.filter_by(category='courses',published=True).all()
+    return render_template('home.html',total=total,counts=counts,recent_items=recent_items,subjects=subjects,attempts=attempts,courses=courses)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -389,58 +392,6 @@ def login():
         _login_failed(key)
         flash('ईमेल या पासवर्ड सही नहीं है।', 'error')
     return render_template('login.html', otp_config=msg91_template_config(), otp_pending=False)
-
-
-@app.route('/forgot-password', methods=['GET', 'POST'])
-def forgot_password():
-    """Start a password reset using the already-verified mobile number on a student account."""
-    if request.method == 'POST':
-        phone = normalize_indian_phone(request.form.get('phone', ''))
-        if not phone:
-            flash('कृपया सही 10 अंकों का मोबाइल नंबर डालें।', 'error')
-            return render_template('forgot_password.html', otp_pending=False)
-        phone_row = UserPhone.query.filter_by(phone=phone).first()
-        user = db.session.get(User, phone_row.user_id) if phone_row else None
-        # Do not disclose whether a phone number is registered.
-        if not user or user.role != 'student':
-            flash('यदि इस नंबर से विद्यार्थी अकाउंट जुड़ा है, तो OTP सत्यापन उपलब्ध होगा। सही रजिस्टर्ड नंबर जाँचें या Admin से संपर्क करें।', 'info')
-            return render_template('forgot_password.html', otp_pending=False)
-        session.pop('password_reset_verified', None)
-        session['otp_pending'] = {
-            'purpose': 'forgot_password', 'user_id': user.id, 'phone': phone,
-            'created_at': datetime.utcnow().timestamp()
-        }
-        return render_template('forgot_password.html', otp_pending=True, pending_phone=phone)
-    return render_template('forgot_password.html', otp_pending=False)
-
-
-@app.route('/reset-password', methods=['GET', 'POST'])
-def reset_password():
-    grant = session.get('password_reset_verified') or {}
-    if not grant or datetime.utcnow().timestamp() - float(grant.get('created_at', 0)) > 600:
-        session.pop('password_reset_verified', None)
-        flash('पासवर्ड रीसेट की समय-सीमा समाप्त हो गई। OTP से दोबारा सत्यापन करें।', 'error')
-        return redirect(url_for('forgot_password'))
-    user = db.session.get(User, int(grant.get('user_id', 0)))
-    if not user or user.role != 'student':
-        session.pop('password_reset_verified', None)
-        flash('अकाउंट सत्यापित नहीं हो सका।', 'error')
-        return redirect(url_for('forgot_password'))
-    if request.method == 'POST':
-        new_password = request.form.get('new_password', '')
-        confirm_password = request.form.get('confirm_password', '')
-        if len(new_password) < 10:
-            flash('नया पासवर्ड कम से कम 10 अक्षरों का रखें।', 'error')
-        elif new_password != confirm_password:
-            flash('दोनों पासवर्ड एक जैसे नहीं हैं।', 'error')
-        else:
-            user.password = generate_password_hash(new_password)
-            db.session.commit()
-            session.pop('password_reset_verified', None)
-            session.pop('otp_pending', None)
-            flash('आपका पासवर्ड सफलतापूर्वक बदल गया है। अब नए पासवर्ड से लॉगिन करें।', 'success')
-            return redirect(url_for('login'))
-    return render_template('reset_password.html')
 
 
 @app.route('/otp/complete', methods=['POST'])
@@ -508,15 +459,6 @@ def otp_complete():
     if not user:
         session.pop('otp_pending', None)
         return jsonify(ok=False, message='अकाउंट नहीं मिला।'), 404
-    if purpose == 'forgot_password':
-        row = UserPhone.query.filter_by(user_id=user.id).first()
-        if user.role != 'student' or not row or row.phone != phone:
-            return jsonify(ok=False, message='मोबाइल नंबर इस विद्यार्थी अकाउंट से मेल नहीं खाता।'), 403
-        session.pop('otp_pending', None)
-        session['password_reset_verified'] = {
-            'user_id': user.id, 'created_at': datetime.utcnow().timestamp()
-        }
-        return jsonify(ok=True, redirect=url_for('reset_password'))
     if purpose == 'enroll_existing':
         if user.role != 'student' or UserPhone.query.filter_by(phone=phone).first():
             return jsonify(ok=False, message='यह मोबाइल नंबर किसी अन्य अकाउंट से जुड़ा है।'), 409
