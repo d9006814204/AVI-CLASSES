@@ -813,7 +813,9 @@ def learning_file(item_id):
     item=LearningItem.query.filter_by(id=item_id,published=True).first_or_404()
     if not item.stored_name: abort(404)
     if item.category=='courses' and session.get('role') != 'admin' and not CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first(): abort(403)
-    return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=True,download_name=item.file_name or item.stored_name)
+    file_ext=os.path.splitext(item.file_name or item.stored_name)[1].lower()
+    inline_image=request.args.get('inline')=='1' and file_ext in ('.jpg','.jpeg','.png','.webp','.gif')
+    return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=not inline_image,download_name=item.file_name or item.stored_name)
 
 @app.route('/practice')
 @login_required('student')
