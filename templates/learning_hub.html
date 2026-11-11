@@ -1,1 +1,13 @@
-{% extends 'base.html' %}{% block content %}<div class="page-title"><div><div class="eyebrow">AVI CLASS TR-04 • LEARNING HUB</div><h1>आपकी पढ़ाई का पूरा केंद्र</h1><p>टेस्ट, करंट अफेयर्स, बैच, वीडियो और स्टडी मटेरियल — सब एक जगह।</p></div><span class="class-chip">24×7 LEARNING</span></div><div class="hub-grid">{% for slug,label in content_categories.items() %}<a class="hub-card" href="{{ url_for('learning_category',category=slug) }}"><span class="hub-icon">{% if slug=='test-series' %}✎{% elif slug=='current-affairs' %}📰{% elif slug=='live-batches' %}●{% elif slug=='recorded-batches' %}▶{% elif slug=='daily-quiz' %}⚡{% elif slug=='downloads' %}↓{% elif slug=='free-videos' %}▷{% elif slug=='courses' %}▣{% else %}▤{% endif %}</span><h3>{{ label }}</h3><p>{{ counts.get(slug,0) }} सामग्री उपलब्ध</p><b>अभी देखें →</b></a>{% endfor %}</div><div class="hub-note">नए बैच, वीडियो, नोट्स और डाउनलोड Admin द्वारा समय-समय पर जोड़े जाएँगे।</div>{% endblock %}
+{% extends 'base.html' %}{% block content %}
+<section class="office-learning">
+  <div class="page-title"><div><div class="eyebrow">AVI CLASSES • OFFICE LEARNING</div><h1>Office Courses</h1><p>अपना विषय चुनें। केवल उसी विषय की सामग्री खुलेगी।</p></div><span class="class-chip">24×7 LEARNING</span></div>
+  <div class="office-row">
+    <a class="office-card excel" href="{{ url_for('learning_category',category='courses',topic='excel') }}"><span class="office-icon">▦</span><strong>Excel</strong><small>Excel Course खोलें →</small></a>
+    <a class="office-card word" href="{{ url_for('learning_category',category='courses',topic='word') }}"><span class="office-icon">W</span><strong>Word</strong><small>Word Course खोलें →</small></a>
+    <a class="office-card powerpoint" href="{{ url_for('learning_category',category='courses',topic='powerpoint') }}"><span class="office-icon">P</span><strong>PowerPoint</strong><small>PowerPoint Course खोलें →</small></a>
+  </div>
+</section>
+<style>
+.office-learning{max-width:1100px;margin:0 auto;padding:18px 0 36px}.office-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:24px}.office-card{min-height:145px;border:1px solid #dbe4ff;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:9px;text-decoration:none;color:#10204b;background:#fff;box-shadow:0 8px 24px rgba(32,54,120,.06);transition:transform .15s,box-shadow .15s}.office-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(32,54,120,.12)}.office-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:23px;font-weight:800;background:#e8f0ff;color:#1763e9}.office-card strong{font-size:20px}.office-card small{color:#52658d}.office-card.word .office-icon{background:#e5f2ff;color:#1670c9}.office-card.powerpoint .office-icon{background:#fff0e9;color:#e65a25}@media(max-width:700px){.office-row{grid-template-columns:1fr;gap:12px}.office-card{min-height:110px}}
+</style>
+{% endblock %}
