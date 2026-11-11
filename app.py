@@ -816,17 +816,36 @@ def learning_hub():
     counts={r[0]:r[1] for r in db.session.query(LearningItem.category,func.count(LearningItem.id)).filter_by(published=True).group_by(LearningItem.category).all()}
     return render_template('learning_hub.html',counts=counts)
 
+@app.route('/learning/exam/<slug>')
+@login_required('student')
+def learning_exam(slug):
+    exam_map = {
+        'bpsc': 'BPSC', 'bihar-police': 'Bihar Police', 'bssc': 'BSSC',
+        'tre-teacher': 'TRE Teacher', 'stet-btet': 'STET/BTET'
+    }
+    if slug not in exam_map:
+        abort(404)
+    title = exam_map[slug]
+    # Show only published exam-specific material; do not send exam cards to the general hub.
+    query = LearningItem.query.filter(LearningItem.published.is_(True)).filter(
+        or_(func.lower(LearningItem.title).like(f'%{title.lower()}%'),
+            func.lower(LearningItem.description).like(f'%{title.lower()}%'),
+            func.lower(LearningItem.subject).like(f'%{title.lower()}%')))
+    items = query.order_by(LearningItem.created_at.desc()).all()
+    enrolled_ids = {e.item_id for e in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
+    return render_template('learning_category.html', category='test-series', category_title=title, items=items, enrolled_ids=enrolled_ids)
+
 @app.route('/learning/<category>')
 @login_required('student')
 def learning_category(category):
     if category not in CONTENT_CATEGORIES: abort(404)
     topic=(request.args.get('topic') or '').strip().lower()
     query=LearningItem.query.filter_by(category=category,published=True)
-    if category=='courses' and topic in ('excel','word','powerpoint'):
+    if category=='courses' and topic in ('excel','word','powerpoint','photoshop','coreldraw'):
         # Show only the selected Office course; do not mix other courses into this view.
         pattern=f'%{topic}%'
         query=query.filter(or_(func.lower(LearningItem.title).like(pattern),func.lower(LearningItem.description).like(pattern),func.lower(LearningItem.subject).like(pattern),func.lower(LearningItem.file_name).like(pattern)))
-        category_title={'excel':'Excel Course','word':'Word Course','powerpoint':'PowerPoint Course'}[topic]
+        category_title={'excel':'Excel Course','word':'Word Course','powerpoint':'PowerPoint Course','photoshop':'Photoshop Course','coreldraw':'CorelDRAW Course'}[topic]
     else:
         category_title=CONTENT_CATEGORIES[category]
     items=query.order_by(LearningItem.created_at.desc()).all()
