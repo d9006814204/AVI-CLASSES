@@ -883,6 +883,64 @@ def learning_file(item_id):
     inline_image=request.args.get('inline')=='1' and file_ext in ('.jpg','.jpeg','.png','.webp','.gif')
     return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=not inline_image,download_name=item.file_name or item.stored_name)
 
+@app.route('/mock-test')
+@login_required('student')
+def combined_mock_test():
+    """Build a 150-question class-wise test, balanced across all published subjects."""
+    raw_class = request.args.get('class_no', str(session.get('class_no') or 5))
+    if not raw_class.isdigit() or int(raw_class) not in range(5, 11):
+        abort(404)
+    class_no = int(raw_class)
+    pools = {}
+    for subject_name in SUBJECTS:
+        pools[subject_name] = Question.query.filter_by(
+            published=True, class_no=class_no, subject=subject_name
+        ).order_by(func.random()).all()
+    available = sum(len(items) for items in pools.values())
+    active_subjects = [name for name in SUBJECTS if pools[name]]
+    if available < 150 or not active_subjects:
+        return render_template('mock_test.html', questions=[], class_no=class_no,
+            available=available, required=150, subject_counts={k:len(v) for k,v in pools.items()}, shortage=True)
+    # Round-robin selection keeps every subject represented and caps each at its available pool.
+    chosen=[]; used={name:0 for name in active_subjects}
+    while len(chosen) < 150:
+        progressed=False
+        for name in active_subjects:
+            if used[name] < len(pools[name]) and len(chosen) < 150:
+                chosen.append(pools[name][used[name]])
+                used[name]+=1; progressed=True
+        if not progressed: break
+    # Shuffle final order without changing the balanced subject allocation.
+    import random
+    random.shuffle(chosen)
+    return render_template('mock_test.html', questions=chosen, class_no=class_no,
+        available=available, required=150, subject_counts=used, shortage=False)
+
+@app.route('/mock-test/submit', methods=['POST'])
+@login_required('student')
+def submit_combined_mock_test():
+    raw_class=request.form.get('class_no','')
+    if not raw_class.isdigit() or int(raw_class) not in range(5,11): abort(400)
+    class_no=int(raw_class)
+    ids=[]
+    for raw in request.form.getlist('qid'):
+        if raw.isdigit() and int(raw) not in ids: ids.append(int(raw))
+    if len(ids) != 150: abort(400, description='इस Mock Test में ठीक 150 प्रश्न होने चाहिए।')
+    questions=Question.query.filter(Question.id.in_(ids), Question.published.is_(True), Question.class_no==class_no).all()
+    by_id={q.id:q for q in questions}
+    if len(by_id)!=150: abort(400, description='कुछ प्रश्न अब उपलब्ध नहीं हैं। कृपया नया टेस्ट शुरू करें।')
+    results=[]; score=0; subject_scores={name:{'score':0,'total':0} for name in SUBJECTS}
+    for qid in ids:
+        q=by_id[qid]; selected=request.form.get('q'+str(qid),'')
+        correct=(selected==q.answer); score+=int(correct)
+        subject_scores.setdefault(q.subject,{'score':0,'total':0})
+        subject_scores[q.subject]['total']+=1
+        subject_scores[q.subject]['score']+=int(correct)
+        results.append((q,selected,correct))
+    db.session.add(Attempt(user_id=session['user_id'],class_no=class_no,subject='Combined Mock Test',score=score,total=150))
+    db.session.commit()
+    return render_template('mock_result.html',score=score,total=150,results=results,subject_scores=subject_scores,class_no=class_no)
+
 @app.route('/practice')
 @login_required('student')
 def practice():
