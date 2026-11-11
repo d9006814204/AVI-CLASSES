@@ -833,7 +833,7 @@ def learning_exam(slug):
             func.lower(LearningItem.subject).like(f'%{title.lower()}%')))
     items = query.order_by(LearningItem.created_at.desc()).all()
     enrolled_ids = {e.item_id for e in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
-    return render_template('learning_category.html', category='test-series', category_title=title, items=items, enrolled_ids=enrolled_ids)
+    return render_template('learning_exam.html', category_title=title, exam_slug=slug, items=items, enrolled_ids=enrolled_ids)
 
 @app.route('/learning/<category>')
 @login_required('student')
@@ -841,11 +841,16 @@ def learning_category(category):
     if category not in CONTENT_CATEGORIES: abort(404)
     topic=(request.args.get('topic') or '').strip().lower()
     query=LearningItem.query.filter_by(category=category,published=True)
-    if category=='courses' and topic in ('excel','word','powerpoint','photoshop','coreldraw'):
-        # Show only the selected Office course; do not mix other courses into this view.
-        pattern=f'%{topic}%'
-        query=query.filter(or_(func.lower(LearningItem.title).like(pattern),func.lower(LearningItem.description).like(pattern),func.lower(LearningItem.subject).like(pattern),func.lower(LearningItem.file_name).like(pattern)))
-        category_title={'excel':'Excel Course','word':'Word Course','powerpoint':'PowerPoint Course','photoshop':'Photoshop Course','coreldraw':'CorelDRAW Course'}[topic]
+    if category=='courses' and topic in ('excel','word','powerpoint','photoshop','coreldraw','design'):
+        # Show only the selected course. The combined design course includes Photoshop and CorelDRAW items.
+        fields=(func.lower(LearningItem.title),func.lower(LearningItem.description),func.lower(LearningItem.subject),func.lower(LearningItem.file_name))
+        if topic=='design':
+            query=query.filter(or_(*[or_(field.like('%photoshop%'),field.like('%coreldraw%')) for field in fields]))
+            category_title='Photoshop + CorelDRAW Course'
+        else:
+            pattern=f'%{topic}%'
+            query=query.filter(or_(*[field.like(pattern) for field in fields]))
+            category_title={'excel':'Excel Course','word':'Word Course','powerpoint':'PowerPoint Course','photoshop':'Photoshop Course','coreldraw':'CorelDRAW Course'}[topic]
     else:
         category_title=CONTENT_CATEGORIES[category]
     items=query.order_by(LearningItem.created_at.desc()).all()
