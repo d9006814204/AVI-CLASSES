@@ -7,7 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, inspect, text
 
 try:
     import razorpay
@@ -123,6 +123,7 @@ class LearningItem(db.Model):
     stored_name=db.Column(db.String(255),default='')
     external_url=db.Column(db.String(1000),default='')
     schedule_text=db.Column(db.String(255),default='')
+    content_date=db.Column(db.String(10),default='')
     price=db.Column(db.String(50),default='Free')
     published=db.Column(db.Boolean,default=True,index=True)
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
@@ -147,6 +148,11 @@ class BillingSubscription(db.Model):
 
 with app.app_context():
     db.create_all()
+    # Safe additive migration: preserve all existing LearningItem records.
+    learning_columns={col['name'] for col in inspect(db.engine).get_columns('learning_item')}
+    if 'content_date' not in learning_columns:
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE learning_item ADD COLUMN content_date VARCHAR(10) DEFAULT ''"))
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
     admin_password=os.environ.get('ADMIN_PASSWORD','')
     admin_user = User.query.filter_by(email=admin_email).first()
@@ -297,7 +303,7 @@ def login_required(role=None):
             if not current_user or current_user.role != session.get('role'):
                 session.clear()
                 abort(403)
-            if role and current_user.role != role: abort(403)
+            if role and current_user.role != role and current_user.role != 'admin': abort(403)
             now_ts = datetime.utcnow().timestamp()
             idle_limit = 30 * 60 if current_user.role == 'admin' else 4 * 60 * 60
             last_seen = float(session.get('last_seen', now_ts))
@@ -806,7 +812,7 @@ def enroll_course(item_id):
 def learning_file(item_id):
     item=LearningItem.query.filter_by(id=item_id,published=True).first_or_404()
     if not item.stored_name: abort(404)
-    if item.category=='courses' and not CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first(): abort(403)
+    if item.category=='courses' and session.get('role') != 'admin' and not CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first(): abort(403)
     return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=True,download_name=item.file_name or item.stored_name)
 
 @app.route('/practice')
@@ -855,7 +861,14 @@ def admin_content():
             flash('लिंक http:// या https:// से शुरू होना चाहिए।','error'); return redirect(url_for('admin_content'))
         raw_class=request.form.get('class_no','')
         class_no=int(raw_class) if raw_class.isdigit() and int(raw_class) in CLASSES else None
-        item=LearningItem(category=category,title=title,description=request.form.get('description','').strip(),class_no=class_no,subject=request.form.get('subject','').strip(),file_name=original,stored_name=stored,external_url=url,schedule_text=request.form.get('schedule_text','').strip(),price=request.form.get('price','Free').strip() or 'Free',published=request.form.get('published')=='on')
+        day=request.form.get('publish_day','').strip(); month=request.form.get('publish_month','').strip(); year=request.form.get('publish_year','').strip()
+        content_date=''
+        if category=='current-affairs':
+            try:
+                content_date=datetime(int(year),int(month),int(day)).strftime('%Y-%m-%d')
+            except (TypeError,ValueError):
+                flash('Current Affairs के लिए सही Date, Month और Year चुनें।','error'); return redirect(url_for('admin_content'))
+        item=LearningItem(category=category,title=title,description=request.form.get('description','').strip(),class_no=class_no,subject=request.form.get('subject','').strip(),file_name=original,stored_name=stored,external_url=url,schedule_text=request.form.get('schedule_text','').strip(),content_date=content_date,price=request.form.get('price','Free').strip() or 'Free',published=request.form.get('published')=='on')
         db.session.add(item); db.session.commit(); flash('Learning content सेव हो गया।','success'); return redirect(url_for('admin_content'))
     items=LearningItem.query.order_by(LearningItem.created_at.desc()).limit(200).all()
     return render_template('admin_content.html',items=items)
