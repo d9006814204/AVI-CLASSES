@@ -135,6 +135,26 @@ class CourseEnrollment(db.Model):
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
     __table_args__=(db.UniqueConstraint('user_id','item_id',name='uq_course_enrollment'),)
 
+class SiteNotification(db.Model):
+    id=db.Column(db.Integer,primary_key=True)
+    title=db.Column(db.String(200),nullable=False)
+    message=db.Column(db.String(500),default='')
+    target_url=db.Column(db.String(500),default='')
+    created_at=db.Column(db.DateTime,default=datetime.utcnow,index=True)
+    active=db.Column(db.Boolean,default=True,index=True)
+
+class NotificationRead(db.Model):
+    id=db.Column(db.Integer,primary_key=True)
+    notification_id=db.Column(db.Integer,db.ForeignKey('site_notification.id'),nullable=False,index=True)
+    user_id=db.Column(db.Integer,db.ForeignKey('user.id'),nullable=False,index=True)
+    read_at=db.Column(db.DateTime,default=datetime.utcnow)
+    __table_args__=(db.UniqueConstraint('notification_id','user_id',name='uq_notification_user_read'),)
+
+
+def create_site_notification(title, message='', target_url=''):
+    """Create a broadcast in-app notice; called only after content is published."""
+    db.session.add(SiteNotification(title=(title or 'नया अपडेट')[:200],message=(message or '')[:500],target_url=(target_url or '')[:500]))
+
 class BillingSubscription(db.Model):
     # Separate table: adding it does not alter or delete existing student/question records.
     id=db.Column(db.Integer,primary_key=True)
@@ -259,7 +279,12 @@ def set_subscription_state(subscription_id, status, entity=None):
 
 
 @app.context_processor
-def globals_for_templates(): return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES, 'otp_config': msg91_template_config() if 'msg91_template_config' in globals() else {'widget_id': '', 'widget_token': ''}}
+def globals_for_templates():
+    unread_count=0
+    if session.get('user_id') and session.get('role')=='student':
+        read_ids=db.session.query(NotificationRead.notification_id).filter_by(user_id=session['user_id']).subquery()
+        unread_count=SiteNotification.query.filter(SiteNotification.active.is_(True),~SiteNotification.id.in_(read_ids)).count()
+    return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES,'otp_config':msg91_template_config() if 'msg91_template_config' in globals() else {'widget_id':'','widget_token':''},'notification_unread_count':unread_count}
 
 def _login_throttle_key(email):
     # Hash email + client address; do not store raw IP addresses in the throttle table.
@@ -640,7 +665,9 @@ def new_question():
         if not valid_question_form(request.form): flash('प्रश्न, चारों विकल्प, सही उत्तर, कक्षा और विषय सही भरें।','error')
         else:
             q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),published=request.form.get('published')=='on')
-            db.session.add(q); db.session.commit(); flash('प्रश्न सेव हो गया।','success'); return redirect(url_for('admin'))
+            db.session.add(q)
+            if q.published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नया प्रश्न जोड़ा गया।',url_for('practice',cn=q.class_no,subject=q.subject))
+            db.session.commit(); flash('प्रश्न सेव हो गया।','success'); return redirect(url_for('admin'))
     return render_template('question_form.html',q=None)
 
 @app.route('/admin/questions/<int:qid>/edit',methods=['GET','POST'])
@@ -650,8 +677,11 @@ def edit_question(qid):
     if request.method=='POST':
         if not valid_question_form(request.form): flash('सभी आवश्यक फ़ील्ड सही भरें।','error')
         else:
+            was_published=q.published
             for key in ('subject','chapter','question','a','b','c','d','explanation'): setattr(q,key,request.form.get(key,'').strip())
-            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.published=request.form.get('published')=='on'; db.session.commit()
+            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.published=request.form.get('published')=='on'
+            if q.published and not was_published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नए प्रश्न प्रकाशित हुए।',url_for('practice',cn=q.class_no,subject=q.subject))
+            db.session.commit()
             flash('प्रश्न अपडेट हो गया।','success'); return redirect(url_for('admin'))
     return render_template('question_form.html',q=q)
 
@@ -670,7 +700,9 @@ def question_bank():
 @app.route('/admin/questions/<int:qid>/toggle',methods=['POST'])
 @login_required('admin')
 def toggle_question(qid):
-    q=Question.query.get_or_404(qid); q.published=not q.published; db.session.commit(); flash('प्रश्न की ऑनलाइन स्थिति बदल दी गई।','success'); return redirect(request.referrer or url_for('admin'))
+    q=Question.query.get_or_404(qid); q.published=not q.published
+    if q.published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नया प्रश्न प्रकाशित हुआ।',url_for('practice',cn=q.class_no,subject=q.subject))
+    db.session.commit(); flash('प्रश्न की ऑनलाइन स्थिति बदल दी गई।','success'); return redirect(request.referrer or url_for('admin'))
 @app.route('/admin/questions/<int:qid>/delete',methods=['POST'])
 @login_required('admin')
 def delete_question(qid):
@@ -732,6 +764,7 @@ def import_csv():
                 else:
                     db.session.add(Question(**data,published=publish_new)); added+=1
                 if (added+updated)%300==0: db.session.flush()
+            if added and publish_new: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{added} नए प्रश्न Question Bank में प्रकाशित हुए हैं।',url_for('student'))
             db.session.commit(); flash(f'इम्पोर्ट पूरा: {added} नए प्रश्न, {updated} अपडेट, {skipped} छोड़ी गई पंक्तियाँ। नए प्रश्न {"Published" if publish_new else "Draft"} में सेव हुए।','success')
         except Exception as e: db.session.rollback(); flash('फाइल पढ़ने में समस्या: '+str(e),'error')
         return redirect(url_for('question_bank'))
@@ -871,7 +904,9 @@ def admin_content():
             except (TypeError,ValueError):
                 flash('Current Affairs के लिए सही Date, Month और Year चुनें।','error'); return redirect(url_for('admin_content'))
         item=LearningItem(category=category,title=title,description=request.form.get('description','').strip(),class_no=class_no,subject=request.form.get('subject','').strip(),file_name=original,stored_name=stored,external_url=url,schedule_text=request.form.get('schedule_text','').strip(),content_date=content_date,price=request.form.get('price','Free').strip() or 'Free',published=request.form.get('published')=='on')
-        db.session.add(item); db.session.commit(); flash('Learning content सेव हो गया।','success'); return redirect(url_for('admin_content'))
+        db.session.add(item)
+        if item.published: create_site_notification(f'नई सामग्री: {item.title}',f'{CONTENT_CATEGORIES.get(category,category)} में नई सामग्री उपलब्ध है।',url_for('learning_item',item_id=item.id))
+        db.session.commit(); flash('Learning content सेव हो गया।','success'); return redirect(url_for('admin_content'))
     items=LearningItem.query.order_by(LearningItem.created_at.desc()).limit(200).all()
     return render_template('admin_content.html',items=items)
 
@@ -911,9 +946,30 @@ def help_page():
     return render_template('help.html', title='Help & Support | AVI CLASSES')
 
 @app.route('/notifications')
+@login_required('student')
 def notifications_page():
-    items = LearningItem.query.filter_by(published=True).order_by(LearningItem.created_at.desc()).limit(30).all()
-    return render_template('notifications.html', items=items, title='Notifications | AVI CLASSES')
+    items=SiteNotification.query.filter_by(active=True).order_by(SiteNotification.created_at.desc()).limit(100).all()
+    read_ids={r[0] for r in db.session.query(NotificationRead.notification_id).filter_by(user_id=session['user_id']).all()}
+    return render_template('notifications.html',items=items,read_ids=read_ids,title='Notifications | AVI CLASSES')
+
+@app.route('/notifications/<int:notification_id>/read',methods=['POST'])
+@login_required('student')
+def mark_notification_read(notification_id):
+    item=SiteNotification.query.filter_by(id=notification_id,active=True).first_or_404()
+    exists=NotificationRead.query.filter_by(notification_id=item.id,user_id=session['user_id']).first()
+    if not exists:
+        db.session.add(NotificationRead(notification_id=item.id,user_id=session['user_id']))
+        db.session.commit()
+    return redirect(item.target_url or url_for('notifications_page'))
+
+@app.route('/notifications/read-all',methods=['POST'])
+@login_required('student')
+def mark_all_notifications_read():
+    read_ids={r[0] for r in db.session.query(NotificationRead.notification_id).filter_by(user_id=session['user_id']).all()}
+    for item in SiteNotification.query.filter_by(active=True).all():
+        if item.id not in read_ids: db.session.add(NotificationRead(notification_id=item.id,user_id=session['user_id']))
+    db.session.commit(); flash('सभी सूचनाएँ पढ़ी हुई चिह्नित कर दी गईं।','success')
+    return redirect(url_for('notifications_page'))
 
 @app.route('/manifest.webmanifest')
 def manifest(): return jsonify(name='AVI CLASSES',short_name='AVI CLASSES',start_url='/',display='standalone',background_color='#f6f8ff',theme_color='#071d68',icons=[{'src':'/static/icon.svg','sizes':'any','type':'image/svg+xml','purpose':'any maskable'}])
