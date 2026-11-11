@@ -820,9 +820,18 @@ def learning_hub():
 @login_required('student')
 def learning_category(category):
     if category not in CONTENT_CATEGORIES: abort(404)
-    items=LearningItem.query.filter_by(category=category,published=True).order_by(LearningItem.created_at.desc()).all()
+    topic=(request.args.get('topic') or '').strip().lower()
+    query=LearningItem.query.filter_by(category=category,published=True)
+    if category=='courses' and topic in ('excel','word','powerpoint'):
+        # Show only the selected Office course; do not mix other courses into this view.
+        pattern=f'%{topic}%'
+        query=query.filter(or_(func.lower(LearningItem.title).like(pattern),func.lower(LearningItem.description).like(pattern),func.lower(LearningItem.subject).like(pattern),func.lower(LearningItem.file_name).like(pattern)))
+        category_title={'excel':'Excel Course','word':'Word Course','powerpoint':'PowerPoint Course'}[topic]
+    else:
+        category_title=CONTENT_CATEGORIES[category]
+    items=query.order_by(LearningItem.created_at.desc()).all()
     enrolled_ids={e.item_id for e in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
-    return render_template('learning_category.html',category=category,category_title=CONTENT_CATEGORIES[category],items=items,enrolled_ids=enrolled_ids)
+    return render_template('learning_category.html',category=category,category_title=category_title,items=items,enrolled_ids=enrolled_ids)
 
 @app.route('/learning/item/<int:item_id>')
 @login_required('student')
