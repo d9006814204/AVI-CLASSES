@@ -772,13 +772,13 @@ def student():
     return render_template('student.html',subjects=subjects,attempts=attempts,courses=courses,enrolled_ids=enrolled_ids)
 
 @app.route('/learning')
-@login_required()
+@login_required('student')
 def learning_hub():
     counts={r[0]:r[1] for r in db.session.query(LearningItem.category,func.count(LearningItem.id)).filter_by(published=True).group_by(LearningItem.category).all()}
     return render_template('learning_hub.html',counts=counts)
 
 @app.route('/learning/<category>')
-@login_required()
+@login_required('student')
 def learning_category(category):
     if category not in CONTENT_CATEGORIES: abort(404)
     items=LearningItem.query.filter_by(category=category,published=True).order_by(LearningItem.created_at.desc()).all()
@@ -786,7 +786,7 @@ def learning_category(category):
     return render_template('learning_category.html',category=category,category_title=CONTENT_CATEGORIES[category],items=items,enrolled_ids=enrolled_ids)
 
 @app.route('/learning/item/<int:item_id>')
-@login_required()
+@login_required('student')
 def learning_item(item_id):
     item=LearningItem.query.filter_by(id=item_id,published=True).first_or_404()
     enrolled=CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first()
@@ -802,15 +802,15 @@ def enroll_course(item_id):
     return redirect(url_for('learning_item',item_id=item.id))
 
 @app.route('/learning/file/<int:item_id>')
-@login_required()
+@login_required('student')
 def learning_file(item_id):
     item=LearningItem.query.filter_by(id=item_id,published=True).first_or_404()
     if not item.stored_name: abort(404)
-    if session.get('role') != 'admin' and item.category=='courses' and not CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first(): abort(403)
+    if item.category=='courses' and not CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first(): abort(403)
     return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=True,download_name=item.file_name or item.stored_name)
 
 @app.route('/practice')
-@login_required()
+@login_required('student')
 def practice():
     cn=request.args.get('class_no',str(session.get('class_no'))); subject=request.args.get('subject','')
     if not cn.isdigit() or int(cn) not in CLASSES: abort(404)
