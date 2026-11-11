@@ -61,3 +61,20 @@ body.avi-home-page{background:#f5f6ff}
 .avi-home-page>main.container{max-width:none;width:100%;margin:0;padding:0}
 .avi-home-page .avi-dashboard{width:100%;min-height:100vh}
 @media(min-width:761px){.avi-home-page .avi-dash-sidebar{position:sticky;top:0;height:100vh;overflow-y:auto}}
+
+
+/* AVI CLASSES: global print support and learning image preview */
+.page-print-bar{display:flex;justify-content:flex-end;margin:0 0 14px;}
+.learning-image-preview{margin:18px 0;text-align:center;background:#fff;border:1px solid #dce5ff;border-radius:14px;padding:12px;overflow:auto;}
+.learning-image-preview img{display:block;max-width:100%;height:auto;max-height:none;margin:0 auto;object-fit:contain;}
+@media print{
+  @page{size:A4;margin:12mm;}
+  body{background:#fff!important;color:#111!important;font-size:11pt!important;}
+  .site-header,.main-nav,.site-footer,.page-print-bar,.no-print,.flash{display:none!important;}
+  .container{width:100%!important;max-width:none!important;margin:0!important;padding:0!important;}
+  .table-card,.content-card,.question-card,.review-card,.form-card,.result-hero{box-shadow:none!important;border:1px solid #bbb!important;break-inside:avoid;background:#fff!important;color:#111!important;}
+  a{color:#111!important;text-decoration:none!important;}
+  .learning-image-preview{border:0!important;padding:0!important;overflow:visible!important;}
+  .learning-image-preview img{max-width:100%!important;max-height:260mm!important;page-break-inside:avoid;}
+  input[type=radio],input[type=checkbox]{print-color-adjust:exact;}
+}
