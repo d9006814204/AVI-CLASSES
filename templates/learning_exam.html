@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-title"><div><div class="eyebrow">BIHAR COMPETITIVE EXAMS</div><h1>{{ category_title }}</h1><p>{{ category_title }} की Admin द्वारा प्रकाशित सामग्री।</p></div><a class="btn btn-outline" href="{{ url_for('home') }}">← वापस</a></div>
+<div class="hub-note">{{ category_title }} के प्रश्न, नोट्स, PDF और टेस्ट यहाँ दिखाई देंगे।</div>
+<div class="content-list">
+{% for item in items %}<article class="content-card"><div class="content-card-top"><span class="status live">{{ item.price or 'Free' }}</span>{% if item.class_no %}<span class="muted">कक्षा {{ item.class_no }}</span>{% endif %}</div><h3>{{ item.title }}</h3><p>{{ item.description or 'अधिक जानकारी के लिए खोलें।' }}</p>{% if item.subject %}<small>विषय: {{ item.subject }}</small>{% endif %}{% if item.schedule_text %}<small class="schedule">{{ item.schedule_text }}</small>{% endif %}<div class="content-actions"><a class="btn btn-outline" href="{{ url_for('learning_item',item_id=item.id) }}">विवरण देखें</a></div></article>
+{% else %}<div class="table-card empty">इस परीक्षा की सामग्री अभी उपलब्ध नहीं है। Admin Content Manager में सामग्री जोड़ते समय Title, Description या Subject में <strong>{{ category_title }}</strong> लिखें और Publish करें।</div>{% endfor %}
+</div>{% endblock %}
