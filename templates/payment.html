@@ -1,52 +1,98 @@
 {% extends 'base.html' %}{% block content %}
-<div class="narrow"><section class="form-card" style="text-align:center;padding:32px">
-  <div class="eyebrow">AVI CLASSES MEMBERSHIP</div>
-  <h2>🔒 छह महीने की सदस्यता</h2>
-  <p>आपका Student अकाउंट बन गया है। पढ़ाई के प्रश्न, टेस्ट, नोट्स, वीडियो और कोर्स खोलने के लिए पहले सदस्यता खरीदना जरूरी है।</p>
-  {% if checkout_ready %}
-    <p><strong>अकाउंट:</strong> {{ current_user_email }}</p>
-    <button class="btn full" id="payNow" type="button">Razorpay से सदस्यता खरीदें / AutoPay शुरू करें</button>
-    <p id="paymentMessage" role="status"></p>
-    <input type="hidden" id="csrfToken" value="{{ csrf_token() }}">
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    <script>
-    (() => {
-      const button = document.getElementById('payNow');
-      const message = document.getElementById('paymentMessage');
-      button.addEventListener('click', () => {
-        button.disabled = true; message.textContent = 'Razorpay Checkout खोला जा रहा है…';
-        const options = {
-          key: {{ key_id|tojson }},
-          subscription_id: {{ billing.razorpay_subscription_id|tojson }},
-          name: 'AVI CLASSES',
-          description: 'छह महीने की सदस्यता',
-          prefill: { email: {{ current_user_email|tojson }} },
-          theme: { color: '#123b9a' },
-          handler: function (response) {
-            fetch('{{ url_for("payment_verify") }}', {
-              method: 'POST',
-              headers: {'Content-Type':'application/json','X-CSRFToken':document.getElementById('csrfToken').value},
-              body: JSON.stringify(response)
-            }).then(r => r.json()).then(data => {
-              if (data.ok && data.active) { window.location.href = data.redirect; }
-              else { message.textContent = data.message || 'भुगतान की पुष्टि बाकी है।'; button.disabled = false; }
-            }).catch(() => { message.textContent = 'भुगतान की पुष्टि नहीं हो सकी। कृपया फिर प्रयास करें।'; button.disabled = false; });
-          },
-          modal: { ondismiss: function(){ button.disabled = false; message.textContent = 'Checkout बंद किया गया। आप फिर प्रयास कर सकते हैं।'; } }
-        };
-        const checkout = new Razorpay(options);
-        checkout.on('payment.failed', function(){ button.disabled = false; message.textContent = 'भुगतान पूरा नहीं हुआ। कृपया फिर प्रयास करें।'; });
-        checkout.open();
-      });
-    })();
-    </script>
-  {% else %}
-    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:18px;margin:20px 0">
-      <strong>भुगतान सुविधा अभी सक्रिय नहीं है।</strong>
-      <p>आपका अकाउंट सुरक्षित है, लेकिन सदस्यता खरीदने की सुविधा Admin द्वारा Razorpay सेटअप पूरा करने के बाद खुलेगी। तब तक Student सामग्री लॉक रहेगी।</p>
-    </div>
-    <a class="btn btn-outline" href="{{ url_for('logout') }}" onclick="event.preventDefault();document.getElementById('paywallLogout').submit()">Logout</a>
-    <form id="paywallLogout" method="post" action="{{ url_for('logout') }}" style="display:none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
-  {% endif %}
-</section></div>
+<div class="narrow">
+  <section class="form-card" style="text-align:center;padding:32px">
+    <div class="eyebrow">AVI CLASSES MEMBERSHIP</div>
+    <h2>🔒 छह महीने की सदस्यता</h2>
+    <p>आपका Student अकाउंट बन गया है। पढ़ाई के प्रश्न, टेस्ट, नोट्स, वीडियो और कोर्स खोलने के लिए पहले सदस्यता खरीदना जरूरी है।</p>
+    {% if checkout_ready %}
+      <p><strong>अकाउंट:</strong> {{ current_user_email }}</p>
+      <p>Razorpay पर UPI AutoPay/मैंडेट की अनुमति मांगी जाएगी। सदस्यता की अवधि और अगली किस्त की तारीख Checkout में ध्यान से जाँचें।</p>
+      <button class="btn full" id="payNow" type="button">Razorpay से सदस्यता खरीदें / AutoPay शुरू करें</button>
+      <p id="paymentMessage" role="status" aria-live="polite"></p>
+      <input type="hidden" id="csrfToken" value="{{ csrf_token() }}">
+      <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+      <script>
+      (() => {
+        const button = document.getElementById('payNow');
+        const message = document.getElementById('paymentMessage');
+        const csrf = document.getElementById('csrfToken').value;
+        let checkoutOpened = false;
+
+        button.addEventListener('click', () => {
+          if (checkoutOpened) return;
+          if (typeof window.Razorpay !== 'function') {
+            message.textContent = 'Razorpay Checkout लोड नहीं हुआ। इंटरनेट जाँचकर पेज रीफ्रेश करें।';
+            return;
+          }
+          checkoutOpened = true;
+          button.disabled = true;
+          message.textContent = 'Razorpay Checkout खोला जा रहा है…';
+
+          const options = {
+            key: {{ key_id|tojson }},
+            subscription_id: {{ billing.razorpay_subscription_id|tojson }},
+            name: 'AVI CLASSES',
+            description: 'छह महीने की सदस्यता / AutoPay',
+            prefill: { email: {{ current_user_email|tojson }} },
+            theme: { color: '#123b9a' },
+            handler: async function (response) {
+              message.textContent = 'भुगतान की पुष्टि की जा रही है…';
+              try {
+                const result = await fetch('{{ url_for("payment_verify") }}', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                  },
+                  body: JSON.stringify(response)
+                });
+                const data = await result.json();
+                if (result.ok && data.ok && data.active && data.redirect) {
+                  window.location.href = data.redirect;
+                  return;
+                }
+                message.textContent = data.message || 'AutoPay की पुष्टि अभी बाकी है। कुछ देर बाद फिर जाँचें।';
+              } catch (error) {
+                message.textContent = 'भुगतान की पुष्टि नहीं हो सकी। कृपया पेज रीफ्रेश करके सदस्यता की स्थिति जाँचें।';
+              }
+              checkoutOpened = false;
+              button.disabled = false;
+            },
+            modal: {
+              ondismiss: function () {
+                checkoutOpened = false;
+                button.disabled = false;
+                message.textContent = 'Checkout बंद किया गया। आप चाहें तो फिर प्रयास कर सकते हैं।';
+              }
+            }
+          };
+
+          try {
+            const checkout = new window.Razorpay(options);
+            checkout.on('payment.failed', function () {
+              checkoutOpened = false;
+              button.disabled = false;
+              message.textContent = 'भुगतान पूरा नहीं हुआ। कृपया फिर प्रयास करें।';
+            });
+            checkout.open();
+          } catch (error) {
+            checkoutOpened = false;
+            button.disabled = false;
+            message.textContent = 'Razorpay Checkout शुरू नहीं हो सका। कृपया बाद में प्रयास करें।';
+          }
+        });
+      })();
+      </script>
+    {% else %}
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:18px;margin:20px 0">
+        <strong>भुगतान सुविधा अभी सक्रिय नहीं है।</strong>
+        <p>आपका अकाउंट सुरक्षित है, लेकिन सदस्यता खरीदने की सुविधा Admin द्वारा Razorpay सेटअप पूरा करने के बाद खुलेगी। तब तक Student सामग्री लॉक रहेगी।</p>
+      </div>
+      <form method="post" action="{{ url_for('logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline" type="submit">Logout</button>
+      </form>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}
