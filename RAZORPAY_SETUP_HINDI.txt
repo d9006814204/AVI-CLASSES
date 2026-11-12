@@ -10,7 +10,7 @@ IMPORTANT
 - Test API keys only: test transactions do not debit real money.
 - Do not put API secrets in GitHub, HTML, JavaScript, screenshots, or chat.
 - Existing students already in the database and without a BillingSubscription row remain grandfathered. Only newly registered students are asked to subscribe.
-- New subscriptions are configured for 20 six-month billing cycles (10 years). A student can stop recurring payments by cancelling the mandate/subscription through the available Razorpay/UPI controls; do not promise an unlimited term.
+- New subscriptions are configured for 1 six-month billing cycle (one six-month term). A student can stop recurring payments by cancelling the mandate/subscription through the available Razorpay/UPI controls; do not promise an unlimited term.
 
 RENDER ENVIRONMENT VARIABLES
 Keep existing ADMIN_PASSWORD and DATABASE_URL unchanged. Add/update:
@@ -18,7 +18,7 @@ Keep existing ADMIN_PASSWORD and DATABASE_URL unchanged. Add/update:
 2. RAZORPAY_KEY_SECRET = current TEST Key Secret from Razorpay Dashboard
 3. RAZORPAY_WEBHOOK_SECRET = a new secret string created when configuring the Razorpay webhook (choose a strong random value and use the same value in Render)
 
-The Plan ID is set as a non-secret fallback in app.py. It can optionally be configured as RAZORPAY_PLAN_ID.
+The confirmed TEST Plan ID is set as a non-secret fallback in app.py: plan_TwkTkdtUQrO23M. Render may optionally set RAZORPAY_PLAN_ID to this exact full value.
 
 RAZORPAY TEST WEBHOOK
 After the updated code is deployed, create a webhook in Razorpay TEST MODE:

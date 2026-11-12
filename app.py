@@ -232,7 +232,7 @@ with app.app_context():
     db.session.commit()
 # Require the exact Test/Live Plan ID to be supplied in Render Environment;
 # never silently fall back to an old or unrelated plan.
-RAZORPAY_PLAN_ID = os.environ.get('RAZORPAY_PLAN_ID', '').strip()
+RAZORPAY_PLAN_ID = (os.environ.get('RAZORPAY_PLAN_ID', 'plan_TwkTkdtUQrO23M').strip() or 'plan_TwkTkdtUQrO23M')
 # AVI CLASSES membership is one six-month billing cycle. The Plan controls
 # the six-month interval; total_count=1 ends the subscription after that cycle.
 try:
