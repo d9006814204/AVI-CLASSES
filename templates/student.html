@@ -4,40 +4,18 @@
   <a class="avi-dash-brand" href="{{ url_for('student') }}"><span>🎓</span><strong>AVI <b>CLASSES</b></strong><small>Learn • Practice • Crack</small></a>
   <nav class="avi-dash-nav">
    <a class="active" href="{{ url_for('student') }}">▦ <span>Dashboard</span></a>
-   <a href="{{ url_for('learning_category',category='live-batches') }}">▣ <span>Live Classes</span><i>LIVE</i></a>
+   <a href="{{ url_for('learning_category',category='live-batches') }}">▣ <span>Live Classes</span></a>
    <a href="{{ url_for('learning_category',category='courses') }}">▱ <span>My Courses</span></a>
+   <a href="{{ url_for('learning_category',category='test-series') }}">▤ <span>My Test Series</span></a>
+   <a href="{{ url_for('learning_category',category='courses') }}">▣ <span>Courses</span></a>
    <a href="{{ url_for('learning_category',category='test-series') }}">▤ <span>Test Series</span></a>
-   <a href="{{ url_for('combined_mock_test',class_no=session.get('class_no') or 5) }}">◎ <span>150 प्रश्नों का Mock Test</span></a>
-   <a href="{{ url_for('practice',class_no=session.get('class_no') or 5,subject='Hindi') }}">▣ <span>Question Bank</span></a>
-   <a class="ncert-link" href="#ncert">▤ <span>NCERT</span></a>
-   <a href="{{ url_for('learning_category',category='current-affairs') }}">▥ <span>Current Affairs</span><i class="free-tag">FREE</i></a>
-   <a href="{{ url_for('learning_category',category='downloads') }}">⇩ <span>Study Material</span></a>
-   <a href="{{ url_for('learning_category',category='downloads') }}">⇩ <span>Downloads</span></a>
-   <a href="{{ url_for('learning_category',category='courses') }}">🛒 <span>My Purchase</span></a>
-   <a href="{{ url_for('learning_hub') }}">▣ <span>Wallet &amp; Payments</span></a>
-   <a href="{{ url_for('help_page') }}">♧ <span>Refer &amp; Earn</span></a>
-   <a href="{{ url_for('help_page') }}">ⓘ <span>Help &amp; Support</span></a>
-   <a href="{{ url_for('help_page') }}">⚙ <span>Settings</span></a>
+   <a href="{{ url_for('learning_category',category='downloads') }}">▧ <span>Study Materials</span></a>
+   <a href="{{ url_for('practice',class_no=session.get('class_no') or 5,subject='Hindi') }}">✎ <span>Practice</span></a>
+   <a href="{{ url_for('learning_category',category='materials-store') }}">▤ <span>Answer Writing</span></a>
   </nav>
   <a class="avi-bihar-offer" href="{{ url_for('learning_hub') }}"><span>🏆</span><b>Bihar Level<br>Exam Package</b><strong>₹199 <small>Join Now →</small></strong></a>
  </aside>
  <section class="avi-dash-content">
-  {% if billing %}
-  <div class="avi-dash-panel" style="margin:16px 0;padding:16px">
-   <h3>सदस्यता / AutoPay</h3>
-   <p>स्थिति: <strong>{{ billing.status|capitalize }}</strong></p>
-   {% if billing.status in ['active', 'created', 'authenticated', 'pending'] %}
-   <p>AutoPay बंद करने पर अगली किस्त नहीं कटेगी। पहले से भुगतान की गई अवधि के अंत तक पढ़ाई चालू रहेगी।</p>
-   <form method="post" action="{{ url_for('cancel_subscription') }}" onsubmit="return confirm('क्या आप AutoPay को वर्तमान भुगतान अवधि के अंत में रद्द करना चाहते हैं?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-outline" type="submit">AutoPay रद्द करें</button>
-   </form>
-   {% elif billing.current_end %}
-   <p>आपकी भुगतान की गई अवधि समाप्त होने तक पढ़ाई उपलब्ध रहेगी।</p>
-   {% endif %}
-  </div>
-  {% endif %}
-
   <header class="avi-dash-top"><div><small>👋 Hello {{ session.get('name') }},</small><h1>Welcome to <b>AVI CLASSES</b></h1></div><form class="avi-dash-search" action="{{ url_for('learning_hub') }}"><input name="q" placeholder="Search Courses, Tests, Questions, NCERT..."><button>⌕</button></form><a class="avi-top-icon" href="{{ url_for('notifications_page') }}">♧</a><div class="avi-top-user">👤 <span>{{ session.get('name') }}<small>Student</small></span></div></header>
   <div class="avi-dash-hero-row"><section class="avi-dash-hero"><div class="avi-hero-copy"><span>AVI CLASSES • EXAM PREPARATION</span><h2>बिहार एवं सभी प्रतियोगी परीक्षाओं की<br><em>संपूर्ण तैयारी एक ही प्लेटफॉर्म पर</em></h2><p>✓ कक्षा 5–10 &nbsp; ✓ Bihar Level Exams &nbsp; ✓ Mock Test</p><p>✓ NCERT आधारित प्रश्न &nbsp; ✓ Current Affairs (FREE)</p><a href="{{ url_for('learning_hub') }}">Explore Courses&nbsp; →</a></div><div class="avi-hero-graphic"><span class="bihar-map">✧</span><b>Bihar<br>Exams</b><span class="cap-icon">🎓</span></div></section>
    <section class="avi-quick-panel"><h3>⚡ Quick Actions</h3><div><a href="{{ url_for('learning_hub') }}"><b>🛒</b>Buy Course</a><a href="{{ url_for('combined_mock_test',class_no=session.get('class_no') or 5) }}"><b>▶</b>Start 150-Q Test</a><a href="{{ url_for('learning_category',category='downloads') }}"><b>⇩</b>Download</a><a href="{{ url_for('help_page') }}"><b>▤</b>My Notes</a></div></section>
