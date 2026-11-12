@@ -231,6 +231,12 @@ with app.app_context():
 
     db.session.commit()
 RAZORPAY_PLAN_ID = os.environ.get('RAZORPAY_PLAN_ID', 'plan_TwkTkdtUQrO23M').strip()
+# The Razorpay Plan itself controls the six-month billing interval. This count
+# limits the subscription to 20 billing cycles (10 years for a six-month plan).
+try:
+    RAZORPAY_TOTAL_COUNT = max(1, min(20, int(os.environ.get('RAZORPAY_TOTAL_COUNT', '20'))))
+except (TypeError, ValueError):
+    RAZORPAY_TOTAL_COUNT = 20
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '').strip()
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '').strip()
 RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '').strip()
@@ -556,7 +562,7 @@ def otp_complete():
             try:
                 client = razorpay_client()
                 subscription = client.subscription.create(data={
-                    'plan_id': RAZORPAY_PLAN_ID, 'total_count': 20, 'quantity': 1,
+                    'plan_id': RAZORPAY_PLAN_ID, 'total_count': RAZORPAY_TOTAL_COUNT, 'quantity': 1,
                     'customer_notify': True, 'notes': {'avi_user_id': str(user.id), 'course': 'AVI CLASSES'}
                 })
                 db.session.add(BillingSubscription(user_id=user.id,
@@ -625,7 +631,7 @@ def payment():
         try:
             subscription = razorpay_client().subscription.create(data={
                 'plan_id': RAZORPAY_PLAN_ID,
-                'total_count': 20,
+                'total_count': RAZORPAY_TOTAL_COUNT,
                 'quantity': 1,
                 'customer_notify': True,
                 'notes': {'avi_user_id': str(user.id), 'course': 'AVI CLASSES'}
