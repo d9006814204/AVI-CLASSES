@@ -230,13 +230,15 @@ with app.app_context():
         admin_user.password = generate_password_hash(admin_password)
 
     db.session.commit()
-RAZORPAY_PLAN_ID = os.environ.get('RAZORPAY_PLAN_ID', 'plan_TwkTkdtUQrO23M').strip()
-# The Razorpay Plan itself controls the six-month billing interval. This count
-# limits the subscription to 20 billing cycles (10 years for a six-month plan).
+# Require the exact Test/Live Plan ID to be supplied in Render Environment;
+# never silently fall back to an old or unrelated plan.
+RAZORPAY_PLAN_ID = os.environ.get('RAZORPAY_PLAN_ID', '').strip()
+# AVI CLASSES membership is one six-month billing cycle. The Plan controls
+# the six-month interval; total_count=1 ends the subscription after that cycle.
 try:
-    RAZORPAY_TOTAL_COUNT = max(1, min(20, int(os.environ.get('RAZORPAY_TOTAL_COUNT', '20'))))
+    RAZORPAY_TOTAL_COUNT = max(1, min(20, int(os.environ.get('RAZORPAY_TOTAL_COUNT', '1'))))
 except (TypeError, ValueError):
-    RAZORPAY_TOTAL_COUNT = 20
+    RAZORPAY_TOTAL_COUNT = 1
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '').strip()
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '').strip()
 RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '').strip()
@@ -627,6 +629,12 @@ def payment():
     # have a billing row. If payment credentials are not configured, keep the
     # student on the paywall instead of granting free access or redirect-looping.
     payment_configured = bool(razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET and RAZORPAY_PLAN_ID)
+    # Diagnostic log intentionally reports only presence/absence, never credentials.
+    app.logger.info(
+        'Razorpay payment config check: sdk=%s key_id=%s key_secret=%s plan_id=%s billing_row=%s total_count=%s',
+        bool(razorpay), bool(RAZORPAY_KEY_ID), bool(RAZORPAY_KEY_SECRET),
+        bool(RAZORPAY_PLAN_ID), bool(billing), RAZORPAY_TOTAL_COUNT
+    )
     if not billing and payment_configured:
         try:
             subscription = razorpay_client().subscription.create(data={
