@@ -233,12 +233,12 @@ with app.app_context():
 # Require the exact Test/Live Plan ID to be supplied in Render Environment;
 # never silently fall back to an old or unrelated plan.
 RAZORPAY_PLAN_ID = (os.environ.get('RAZORPAY_PLAN_ID', 'plan_TwkTkdtUQrO23M').strip() or 'plan_TwkTkdtUQrO23M')
-# AVI CLASSES membership is one six-month billing cycle. The Plan controls
-# the six-month interval; total_count=1 ends the subscription after that cycle.
+# Razorpay requires a finite cycle count. Default to 20 six-month cycles
+# (up to 10 years); the student can cancel renewal at the end of the paid cycle.
 try:
-    RAZORPAY_TOTAL_COUNT = max(1, min(20, int(os.environ.get('RAZORPAY_TOTAL_COUNT', '1'))))
+    RAZORPAY_TOTAL_COUNT = max(1, min(20, int(os.environ.get('RAZORPAY_TOTAL_COUNT', '20'))))
 except (TypeError, ValueError):
-    RAZORPAY_TOTAL_COUNT = 1
+    RAZORPAY_TOTAL_COUNT = 20
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '').strip()
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '').strip()
 RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '').strip()
@@ -304,10 +304,15 @@ def razorpay_client():
 
 
 def billing_is_active(user_id):
-    # Fail closed: every student must have a verified active subscription.
-    # A missing billing row is NOT treated as a free/grandfathered account.
+    # Access is allowed while Razorpay reports active, or until the already-paid
+    # cycle end after a cancellation/completion event.
     record = BillingSubscription.query.filter_by(user_id=user_id).first()
-    return bool(record and record.status == 'active')
+    if not record:
+        return False
+    if record.status == 'active':
+        return True
+    return bool(record.current_end and record.current_end > int(datetime.now(timezone.utc).timestamp())
+                and record.status in {'cancelled', 'completed'})
 
 
 def set_subscription_state(subscription_id, status, entity=None):
@@ -622,7 +627,7 @@ def otp_complete():
 def payment():
     user = db.session.get(User, session['user_id'])
     billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
-    if billing and billing.status == 'active':
+    if billing and billing_is_active(session['user_id']):
         return redirect(url_for('student'))
 
     # Create a Razorpay subscription lazily for older accounts that do not yet
@@ -696,6 +701,28 @@ def payment_status():
     if not billing or billing.status == 'active':
         return redirect(url_for('student'))
     return redirect(url_for('payment'))
+
+
+@app.route('/subscription/cancel', methods=['POST'])
+@login_required('student')
+def cancel_subscription():
+    billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
+    if not billing:
+        flash('आपकी कोई सक्रिय सदस्यता नहीं मिली।', 'error')
+        return redirect(url_for('student'))
+    if billing.status not in {'active', 'created', 'authenticated', 'pending'}:
+        flash('यह सदस्यता पहले ही रद्द या पूरी हो चुकी है।', 'info')
+        return redirect(url_for('student'))
+    try:
+        # Cancel at the end of the current paid billing cycle, not immediately.
+        razorpay_client().subscription.cancel(
+            billing.razorpay_subscription_id, {'cancel_at_cycle_end': 1}
+        )
+        flash('AutoPay रद्द करने का अनुरोध भेज दिया गया है। पहले से भुगतान की गई अवधि के अंत तक पढ़ाई चालू रहेगी।', 'success')
+    except Exception:
+        app.logger.exception('Razorpay subscription cancellation request failed')
+        flash('सदस्यता रद्द नहीं हो सकी। कृपया बाद में फिर प्रयास करें या Admin से संपर्क करें।', 'error')
+    return redirect(url_for('student'))
 
 
 @app.route('/webhooks/razorpay', methods=['POST'])
@@ -888,7 +915,9 @@ def student():
     enrolled=CourseEnrollment.query.filter_by(user_id=session['user_id']).all()
     enrolled_ids={e.item_id for e in enrolled}
     courses=LearningItem.query.filter_by(category='courses',published=True).order_by(LearningItem.created_at.desc()).all()
-    return render_template('student.html',subjects=subjects,attempts=attempts,courses=courses,enrolled_ids=enrolled_ids)
+    billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
+    return render_template('student.html',subjects=subjects,attempts=attempts,courses=courses,
+                           enrolled_ids=enrolled_ids,billing=billing)
 
 @app.route('/learning')
 @login_required('student')
