@@ -996,7 +996,7 @@ def admin_content():
                 flash('Current Affairs के लिए सही Date, Month और Year चुनें।','error'); return redirect(url_for('admin_content'))
         item=LearningItem(category=category,title=title,description=request.form.get('description','').strip(),class_no=class_no,subject=request.form.get('subject','').strip(),file_name=original,stored_name=stored,external_url=url,schedule_text=request.form.get('schedule_text','').strip(),content_date=content_date,price=request.form.get('price','Free').strip() or 'Free',published=request.form.get('published')=='on')
         db.session.add(item)
-        if item.published: create_site_notification(f'नई सामग्री: {item.title}',f'{CONTENT_CATEGORIES.get(category,category)} में नई सामग्री उपलब्ध है।',url_for('learning_item',item_id=item.id))
+        if item.published: create_site_notification(f'नई सामग्री: {item.title}', f'{CONTENT_CATEGORIES.get(category, category)} में नई सामग्री उपलब्ध है', url_for('learning_item', item_id=item.id))
         db.session.commit(); flash('Learning content सेव हो गया।','success'); return redirect(url_for('admin_content'))
     items=LearningItem.query.order_by(LearningItem.created_at.desc()).limit(200).all()
     return render_template('admin_content.html',items=items)
