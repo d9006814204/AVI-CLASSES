@@ -1,11 +1,11 @@
 {% extends 'base.html' %}{% block content %}
-<div class="narrow"><section class="form-card">
+<div class="narrow"><section class="form-card" style="text-align:center;padding:32px">
   <div class="eyebrow">AVI CLASSES MEMBERSHIP</div>
-  <h2>छह महीने की सदस्यता</h2>
-  <p>अपनी सदस्यता सक्रिय करने के लिए सुरक्षित Razorpay Checkout पूरा करें।</p>
+  <h2>🔒 छह महीने की सदस्यता</h2>
+  <p>आपका Student अकाउंट बन गया है। पढ़ाई के प्रश्न, टेस्ट, नोट्स, वीडियो और कोर्स खोलने के लिए पहले सदस्यता खरीदना जरूरी है।</p>
   {% if checkout_ready %}
     <p><strong>अकाउंट:</strong> {{ current_user_email }}</p>
-    <button class="btn full" id="payNow" type="button">Razorpay से भुगतान / AutoPay शुरू करें</button>
+    <button class="btn full" id="payNow" type="button">Razorpay से सदस्यता खरीदें / AutoPay शुरू करें</button>
     <p id="paymentMessage" role="status"></p>
     <input type="hidden" id="csrfToken" value="{{ csrf_token() }}">
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -29,8 +29,8 @@
               body: JSON.stringify(response)
             }).then(r => r.json()).then(data => {
               if (data.ok && data.active) { window.location.href = data.redirect; }
-              else { message.textContent = data.message || 'अनुमति मिल गई है; सदस्यता सक्रिय होने की पुष्टि बाकी है।'; button.disabled = false; }
-            }).catch(() => { message.textContent = 'भुगतान की पुष्टि नहीं हो सकी। कृपया सदस्यता स्थिति जाँचें।'; button.disabled = false; });
+              else { message.textContent = data.message || 'भुगतान की पुष्टि बाकी है।'; button.disabled = false; }
+            }).catch(() => { message.textContent = 'भुगतान की पुष्टि नहीं हो सकी। कृपया फिर प्रयास करें।'; button.disabled = false; });
           },
           modal: { ondismiss: function(){ button.disabled = false; message.textContent = 'Checkout बंद किया गया। आप फिर प्रयास कर सकते हैं।'; } }
         };
@@ -41,7 +41,12 @@
     })();
     </script>
   {% else %}
-    <p>भुगतान सेवा अभी कॉन्फ़िगर नहीं है। कृपया AVI CLASSES Admin से संपर्क करें।</p>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:18px;margin:20px 0">
+      <strong>भुगतान सुविधा अभी सक्रिय नहीं है।</strong>
+      <p>आपका अकाउंट सुरक्षित है, लेकिन सदस्यता खरीदने की सुविधा Admin द्वारा Razorpay सेटअप पूरा करने के बाद खुलेगी। तब तक Student सामग्री लॉक रहेगी।</p>
+    </div>
+    <a class="btn btn-outline" href="{{ url_for('logout') }}" onclick="event.preventDefault();document.getElementById('paywallLogout').submit()">Logout</a>
+    <form id="paywallLogout" method="post" action="{{ url_for('logout') }}" style="display:none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
   {% endif %}
 </section></div>
 {% endblock %}
