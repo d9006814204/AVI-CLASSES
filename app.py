@@ -54,7 +54,16 @@ def add_security_headers(response):
     return response
 
 CLASSES = list(range(1,11))
-SUBJECTS = ['Hindi','English','Mathematics','Science','Social Science','EVS','General Knowledge']
+SUBJECTS = ['Hindi','English','Mathematics','Science','Social Science','EVS','General Knowledge',
+            'General Studies','Reasoning','Current Affairs','General Science','History','Geography',
+            'Polity','Economics','Child Development & Pedagogy']
+EXAM_CATEGORIES = {
+    'bpsc': 'BPSC',
+    'bihar-police': 'Bihar Police',
+    'bssc': 'BSSC',
+    'tre-teacher': 'TRE Teacher',
+    'stet-btet': 'STET/BTET',
+}
 
 class User(db.Model):
     id=db.Column(db.Integer,primary_key=True); name=db.Column(db.String(120),nullable=False)
@@ -94,7 +103,7 @@ class Question(db.Model):
     subject=db.Column(db.String(80),nullable=False,index=True); chapter=db.Column(db.String(160),default='')
     question=db.Column(db.Text,nullable=False); a=db.Column(db.Text,nullable=False); b=db.Column(db.Text,nullable=False)
     c=db.Column(db.Text,nullable=False); d=db.Column(db.Text,nullable=False); answer=db.Column(db.String(1),nullable=False)
-    explanation=db.Column(db.Text,default=''); published=db.Column(db.Boolean,default=False,index=True)
+    explanation=db.Column(db.Text,default=''); exam_slug=db.Column(db.String(40),default='',index=True); published=db.Column(db.Boolean,default=False,index=True)
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
 class Attempt(db.Model):
     id=db.Column(db.Integer,primary_key=True); user_id=db.Column(db.Integer,db.ForeignKey('user.id'),nullable=False,index=True)
@@ -173,6 +182,11 @@ with app.app_context():
     if 'content_date' not in learning_columns:
         with db.engine.begin() as conn:
             conn.execute(text("ALTER TABLE learning_item ADD COLUMN content_date VARCHAR(10) DEFAULT ''"))
+    # Safe additive migration: attach optional competitive-exam category to questions.
+    question_columns={col['name'] for col in inspect(db.engine).get_columns('question')}
+    if 'exam_slug' not in question_columns:
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE question ADD COLUMN exam_slug VARCHAR(40) DEFAULT ''"))
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
     admin_password=os.environ.get('ADMIN_PASSWORD','')
     admin_user = User.query.filter_by(email=admin_email).first()
@@ -284,7 +298,7 @@ def globals_for_templates():
     if session.get('user_id') and session.get('role')=='student':
         read_ids=db.session.query(NotificationRead.notification_id).filter_by(user_id=session['user_id']).subquery()
         unread_count=SiteNotification.query.filter(SiteNotification.active.is_(True),~SiteNotification.id.in_(read_ids)).count()
-    return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES,'otp_config':msg91_template_config() if 'msg91_template_config' in globals() else {'widget_id':'','widget_token':''},'notification_unread_count':unread_count}
+    return {'classes':CLASSES,'subjects':SUBJECTS,'content_categories':CONTENT_CATEGORIES,'exam_categories':EXAM_CATEGORIES,'otp_config':msg91_template_config() if 'msg91_template_config' in globals() else {'widget_id':'','widget_token':''},'notification_unread_count':unread_count}
 
 def _login_throttle_key(email):
     # Hash email + client address; do not store raw IP addresses in the throttle table.
@@ -348,7 +362,7 @@ def valid_question_form(data):
     cn=data.get('class_no',''); sub=data.get('subject','')
     vals=[data.get(k,'').strip() for k in ('question','a','b','c','d')]
     ans=data.get('answer','').upper()
-    return cn in [str(x) for x in CLASSES] and sub in SUBJECTS and all(vals) and ans in ['A','B','C','D']
+    return cn in [str(x) for x in CLASSES] and sub in SUBJECTS and data.get('exam_slug','') in ['', *EXAM_CATEGORIES.keys()] and all(vals) and ans in ['A','B','C','D']
 
 @app.route('/')
 def home():
@@ -664,7 +678,7 @@ def new_question():
     if request.method=='POST':
         if not valid_question_form(request.form): flash('प्रश्न, चारों विकल्प, सही उत्तर, कक्षा और विषय सही भरें।','error')
         else:
-            q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),published=request.form.get('published')=='on')
+            q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),exam_slug=request.form.get('exam_slug','').strip(),published=request.form.get('published')=='on')
             db.session.add(q)
             if q.published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नया प्रश्न जोड़ा गया।',url_for('practice',cn=q.class_no,subject=q.subject))
             db.session.commit(); flash('प्रश्न सेव हो गया।','success'); return redirect(url_for('admin'))
@@ -679,7 +693,7 @@ def edit_question(qid):
         else:
             was_published=q.published
             for key in ('subject','chapter','question','a','b','c','d','explanation'): setattr(q,key,request.form.get(key,'').strip())
-            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.published=request.form.get('published')=='on'
+            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.exam_slug=request.form.get('exam_slug','').strip(); q.published=request.form.get('published')=='on'
             if q.published and not was_published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नए प्रश्न प्रकाशित हुए।',url_for('practice',cn=q.class_no,subject=q.subject))
             db.session.commit()
             flash('प्रश्न अपडेट हो गया।','success'); return redirect(url_for('admin'))
@@ -689,13 +703,14 @@ def edit_question(qid):
 @login_required('admin')
 def question_bank():
     query=Question.query
-    cn=request.args.get('class_no',''); sub=request.args.get('subject',''); status=request.args.get('status','')
+    cn=request.args.get('class_no',''); sub=request.args.get('subject',''); status=request.args.get('status',''); exam_slug=request.args.get('exam_slug','')
     if cn.isdigit() and int(cn) in CLASSES: query=query.filter_by(class_no=int(cn))
     if sub in SUBJECTS: query=query.filter_by(subject=sub)
+    if exam_slug in EXAM_CATEGORIES: query=query.filter_by(exam_slug=exam_slug)
     if status=='live': query=query.filter_by(published=True)
     elif status=='draft': query=query.filter_by(published=False)
     page=max(1,request.args.get('page',1,type=int)); pagination=query.order_by(Question.id.desc()).paginate(page=page,per_page=30,error_out=False)
-    return render_template('question_bank.html',pagination=pagination,filter_class=cn,filter_subject=sub,status=status)
+    return render_template('question_bank.html',pagination=pagination,filter_class=cn,filter_subject=sub,status=status,filter_exam=exam_slug,exam_categories=EXAM_CATEGORIES)
 
 @app.route('/admin/questions/<int:qid>/toggle',methods=['POST'])
 @login_required('admin')
@@ -709,7 +724,7 @@ def delete_question(qid):
     q=Question.query.get_or_404(qid); db.session.delete(q); db.session.commit(); flash('प्रश्न हटाया गया।','success'); return redirect(request.referrer or url_for('admin'))
 
 def normalize_import_row(row):
-    aliases = {'id':['id','question_id'],'class_no':['class_no','class'],'subject':['subject'],'chapter':['chapter'],'question':['question'],'a':['a','option_a'],'b':['b','option_b'],'c':['c','option_c'],'d':['d','option_d'],'answer':['answer','correct_answer'],'explanation':['explanation']}
+    aliases = {'id':['id','question_id'],'class_no':['class_no','class'],'subject':['subject'],'chapter':['chapter'],'question':['question'],'a':['a','option_a'],'b':['b','option_b'],'c':['c','option_c'],'d':['d','option_d'],'answer':['answer','correct_answer'],'explanation':['explanation'],'exam_slug':['exam_slug','exam']}
     lowered={str(k).strip().lower():('' if v is None else str(v).strip()) for k,v in (row or {}).items() if k is not None}
     return {key: next((lowered[n] for n in names if n in lowered), '') for key,names in aliases.items()}
 
@@ -753,7 +768,7 @@ def import_csv():
             for r in rows:
                 cn=str(r.get('class_no','')).strip(); ans=str(r.get('answer','')).strip().upper(); sub=str(r.get('subject','')).strip()
                 if cn not in [str(x) for x in CLASSES] or sub not in SUBJECTS or ans not in ['A','B','C','D'] or not all(str(r.get(k,'')).strip() for k in ['question','a','b','c','d']): skipped+=1; continue
-                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip())
+                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else '')
                 raw_id=str(r.get('id','')).strip()
                 if raw_id:
                     if not raw_id.isdigit(): skipped+=1; continue
@@ -773,8 +788,8 @@ def import_csv():
 @app.route('/admin/template/<fmt>')
 @login_required('admin')
 def bulk_template(fmt):
-    headers=['id','class_no','subject','chapter','question','a','b','c','d','answer','explanation']
-    sample=['','7','General Knowledge','सामान्य ज्ञान','भारत की राजधानी क्या है?','पटना','नई दिल्ली','मुंबई','कोलकाता','B','भारत की राजधानी नई दिल्ली है।']
+    headers=['id','class_no','subject','chapter','question','a','b','c','d','answer','explanation','exam_slug']
+    sample=['','7','General Knowledge','सामान्य ज्ञान','भारत की राजधानी क्या है?','पटना','नई दिल्ली','मुंबई','कोलकाता','B','भारत की राजधानी नई दिल्ली है।','']
     if fmt=='xlsx':
         from openpyxl import Workbook
         wb=Workbook(); ws=wb.active; ws.title='Questions'; ws.append(headers); ws.append(sample); bio=io.BytesIO(); wb.save(bio); bio.seek(0)
@@ -819,21 +834,23 @@ def learning_hub():
 @app.route('/learning/exam/<slug>')
 @login_required('student')
 def learning_exam(slug):
-    exam_map = {
-        'bpsc': 'BPSC', 'bihar-police': 'Bihar Police', 'bssc': 'BSSC',
-        'tre-teacher': 'TRE Teacher', 'stet-btet': 'STET/BTET'
-    }
-    if slug not in exam_map:
+    if slug not in EXAM_CATEGORIES:
         abort(404)
-    title = exam_map[slug]
-    # Show only published exam-specific material; do not send exam cards to the general hub.
+    title = EXAM_CATEGORIES[slug]
+    # Existing notes/PDF/course content plus exam-specific published MCQs.
     query = LearningItem.query.filter(LearningItem.published.is_(True)).filter(
         or_(func.lower(LearningItem.title).like(f'%{title.lower()}%'),
             func.lower(LearningItem.description).like(f'%{title.lower()}%'),
             func.lower(LearningItem.subject).like(f'%{title.lower()}%')))
     items = query.order_by(LearningItem.created_at.desc()).all()
-    enrolled_ids = {e.item_id for e in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
-    return render_template('learning_exam.html', category_title=title, exam_slug=slug, items=items, enrolled_ids=enrolled_ids)
+    questions = Question.query.filter_by(exam_slug=slug, published=True).all()
+    groups = db.session.query(Question.class_no, Question.subject, func.count(Question.id)).filter_by(
+        exam_slug=slug, published=True).group_by(Question.class_no, Question.subject).order_by(
+        Question.class_no, Question.subject).all()
+    enrolled_ids = {x.item_id for x in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
+    return render_template('learning_exam.html', category_title=title, exam_slug=slug,
+                           items=items, questions=questions, question_groups=groups,
+                           enrolled_ids=enrolled_ids)
 
 @app.route('/learning/<category>')
 @login_required('student')
@@ -948,10 +965,13 @@ def practice():
     if not cn.isdigit() or int(cn) not in CLASSES: abort(404)
     if subject not in SUBJECTS: abort(404)
     chapter=request.args.get('chapter','').strip()
+    exam_slug=request.args.get('exam_slug','').strip()
     query=Question.query.filter_by(published=True,class_no=int(cn),subject=subject)
     if chapter: query=query.filter_by(chapter=chapter)
+    if exam_slug in EXAM_CATEGORIES: query=query.filter_by(exam_slug=exam_slug)
     questions=query.order_by(func.random()).limit(20).all()
-    return render_template('practice.html',questions=questions,subject=subject,minutes=20,class_no=int(cn))
+    return render_template('practice.html',questions=questions,subject=subject,minutes=20,class_no=int(cn),
+                           exam_title=EXAM_CATEGORIES.get(exam_slug,''))
 
 @app.route('/check',methods=['POST'])
 @login_required('student')
