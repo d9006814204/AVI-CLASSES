@@ -8,6 +8,7 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, or_, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 try:
     import razorpay
@@ -37,10 +38,31 @@ if raw_db:
     if raw_db.startswith('postgres://'): raw_db = raw_db.replace('postgres://','postgresql://',1)
     if raw_db.startswith('postgresql://') and '+psycopg' not in raw_db: raw_db = raw_db.replace('postgresql://','postgresql+psycopg://',1)
     app.config['SQLALCHEMY_DATABASE_URI'] = raw_db
+    # Neon/hosted PostgreSQL: discard stale pooled sockets and use TCP keepalives.
+    # These options are applied only to PostgreSQL; local SQLite remains unchanged.
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
+        'pool_size': 3,
+        'max_overflow': 2,
+        'pool_use_lifo': True,
+        'connect_args': {
+            'connect_timeout': 10,
+            'keepalives': 1,
+            'keepalives_idle': 30,
+            'keepalives_interval': 10,
+            'keepalives_count': 5,
+        },
+    })
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE,'avi_class.db')
 
 db = SQLAlchemy(app)
+
+@app.errorhandler(SQLAlchemyError)
+def handle_database_error(error):
+    # A dropped hosted-DB connection should show a recoverable message, not a raw 500.
+    db.session.rollback()
+    app.logger.exception('Database operation failed; check hosted PostgreSQL connection')
+    return ('डेटाबेस से कनेक्शन अस्थायी रूप से टूट गया है। कृपया 30 सेकंड बाद दोबारा प्रयास करें।', 503)
 csrf = CSRFProtect(app)
 
 @app.after_request
@@ -274,8 +296,10 @@ def razorpay_client():
 
 
 def billing_is_active(user_id):
+    # Fail closed: every student must have a verified active subscription.
+    # A missing billing row is NOT treated as a free/grandfathered account.
     record = BillingSubscription.query.filter_by(user_id=user_id).first()
-    return record is None or record.status == 'active'  # Existing students are grandfathered.
+    return bool(record and record.status == 'active')
 
 
 def set_subscription_state(subscription_id, status, entity=None):
@@ -588,15 +612,42 @@ def otp_complete():
 @app.route('/payment')
 @login_required('student')
 def payment():
+    user = db.session.get(User, session['user_id'])
     billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
-    if not billing:
+    if billing and billing.status == 'active':
         return redirect(url_for('student'))
-    if billing.status == 'active':
-        return redirect(url_for('student'))
-    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET or not razorpay:
-        flash('भुगतान सेटअप अधूरा है। कृपया AVI CLASSES Admin से संपर्क करें।','error')
-        return render_template('payment.html', billing=billing, key_id='', checkout_ready=False, current_user_email=User.query.get(session['user_id']).email)
-    return render_template('payment.html', billing=billing, key_id=RAZORPAY_KEY_ID, checkout_ready=True, current_user_email=User.query.get(session['user_id']).email)
+
+    # Create a Razorpay subscription lazily for older accounts that do not yet
+    # have a billing row. If payment credentials are not configured, keep the
+    # student on the paywall instead of granting free access or redirect-looping.
+    payment_configured = bool(razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET and RAZORPAY_PLAN_ID)
+    if not billing and payment_configured:
+        try:
+            subscription = razorpay_client().subscription.create(data={
+                'plan_id': RAZORPAY_PLAN_ID,
+                'total_count': 20,
+                'quantity': 1,
+                'customer_notify': True,
+                'notes': {'avi_user_id': str(user.id), 'course': 'AVI CLASSES'}
+            })
+            billing = BillingSubscription(
+                user_id=user.id,
+                razorpay_subscription_id=subscription['id'],
+                status=subscription.get('status', 'created')
+            )
+            db.session.add(billing)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception('Could not create Razorpay subscription for student paywall')
+
+    checkout_ready = bool(payment_configured and billing)
+    if not checkout_ready:
+        flash('आपका अकाउंट बन गया है। पढ़ाई की सामग्री खोलने के लिए सदस्यता खरीदना जरूरी है। भुगतान सुविधा अभी Admin द्वारा सक्रिय की जानी बाकी है।', 'warning')
+    return render_template(
+        'payment.html', billing=billing, key_id=RAZORPAY_KEY_ID if checkout_ready else '',
+        checkout_ready=checkout_ready, current_user_email=user.email if user else ''
+    )
 
 
 @app.route('/payment/verify', methods=['POST'])
@@ -1089,6 +1140,13 @@ def manifest(): return jsonify(name='AVI CLASSES',short_name='AVI CLASSES',start
 def service_worker():
     resp=make_response("const CACHE='avi-classes-premium-v2'; self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','/static/style.css','/static/icon.svg'])))); self.addEventListener('activate',e=>e.waitUntil(self.clients.claim())); self.addEventListener('fetch',e=>{if(e.request.method==='GET' && new URL(e.request.url).origin===location.origin){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));}});"); resp.headers['Content-Type']='application/javascript'; return resp
 @app.route('/health')
-def health(): return {'status':'ok','app':'AVI CLASS TR-04','database':'configured'}
+def health():
+    try:
+        db.session.execute(text('SELECT 1'))
+        return {'status':'ok','app':'AVI CLASSES','database':'connected'}, 200
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception('Health check: database connection failed')
+        return {'status':'error','app':'AVI CLASSES','database':'unavailable'}, 503
 
 if __name__=='__main__': app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)),debug=False)
