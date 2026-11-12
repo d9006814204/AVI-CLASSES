@@ -388,9 +388,7 @@ def login_required(role=None):
                 flash('सुरक्षा के लिए आपका सत्र समाप्त हुआ। कृपया फिर लॉगिन करें।', 'error')
                 return redirect(url_for('login'))
             session['last_seen'] = now_ts
-            if session.get('role') == 'student' and request.endpoint not in {'payment','payment_verify','payment_status','logout'}:
-                if not billing_is_active(session.get('user_id')):
-                    return redirect(url_for('payment'))
+            # Student accounts can enter the dashboard without a site-wide membership paywall.
             return fn(*args,**kwargs)
         return wrapped
     return deco
@@ -465,8 +463,7 @@ def login():
             session.permanent = True
             session.update(user_id=user.id, name=user.name, role=user.role,
                            class_no=user.class_no, last_seen=datetime.utcnow().timestamp())
-            if user.role == 'student' and not billing_is_active(user.id):
-                return redirect(url_for('payment'))
+            # Login should open the student dashboard directly; no mandatory membership page.
             return redirect(url_for('admin' if user.role == 'admin' else 'student'))
         _login_failed(key)
         flash('ईमेल या पासवर्ड सही नहीं है।', 'error')
@@ -617,14 +614,13 @@ def otp_complete():
     session.permanent = True
     session.update(user_id=user.id, name=user.name, role=user.role,
                    class_no=user.class_no, last_seen=datetime.utcnow().timestamp())
-    if user.role == 'student' and not billing_is_active(user.id):
-        return jsonify(ok=True, redirect=url_for('payment'))
     return jsonify(ok=True, redirect=url_for('admin' if user.role == 'admin' else 'student'))
 
 
 @app.route('/payment')
 @login_required('student')
 def payment():
+    return redirect(url_for('student'))
     user = db.session.get(User, session['user_id'])
     billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
     if billing and billing_is_active(session['user_id']):
