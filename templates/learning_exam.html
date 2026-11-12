@@ -1,7 +1,21 @@
 {% extends 'base.html' %}{% block content %}
-<div class="page-title"><div><div class="eyebrow">BIHAR COMPETITIVE EXAMS</div><h1>{{ category_title }}</h1><p>{{ category_title }} की Admin द्वारा प्रकाशित सामग्री।</p></div><a class="btn btn-outline" href="{{ url_for('home') }}">← वापस</a></div>
-<div class="hub-note">{{ category_title }} के प्रश्न, नोट्स, PDF और टेस्ट यहाँ दिखाई देंगे।</div>
+<div class="page-title"><div><div class="eyebrow">BIHAR COMPETITIVE EXAMS</div><h1>{{ category_title }}</h1><p>{{ category_title }} के लिए प्रकाशित प्रश्न, नोट्स, PDF और टेस्ट।</p></div><a class="btn btn-outline" href="{{ url_for('home') }}">← वापस</a></div>
+<div class="hub-note">{{ category_title }} के प्रश्न और अध्ययन सामग्री नीचे उपलब्ध हैं।</div>
+
+{% if question_groups %}
+<section class="table-card" style="margin:20px 0"><h2>Objective Questions / ऑनलाइन अभ्यास</h2>
+<p class="muted">कक्षा और विषय चुनकर अभ्यास टेस्ट शुरू करें।</p>
 <div class="content-list">
-{% for item in items %}<article class="content-card"><div class="content-card-top"><span class="status live">{{ item.price or 'Free' }}</span>{% if item.class_no %}<span class="muted">कक्षा {{ item.class_no }}</span>{% endif %}</div><h3>{{ item.title }}</h3><p>{{ item.description or 'अधिक जानकारी के लिए खोलें।' }}</p>{% if item.subject %}<small>विषय: {{ item.subject }}</small>{% endif %}{% if item.schedule_text %}<small class="schedule">{{ item.schedule_text }}</small>{% endif %}<div class="content-actions"><a class="btn btn-outline" href="{{ url_for('learning_item',item_id=item.id) }}">विवरण देखें</a></div></article>
-{% else %}<div class="table-card empty">इस परीक्षा की सामग्री अभी उपलब्ध नहीं है। Admin Content Manager में सामग्री जोड़ते समय Title, Description या Subject में <strong>{{ category_title }}</strong> लिखें और Publish करें।</div>{% endfor %}
-</div>{% endblock %}
+{% for class_no, subject, count in question_groups %}
+<article class="content-card"><div class="content-card-top"><span class="status live">{{ count }} प्रश्न</span><span class="muted">कक्षा {{ class_no }}</span></div>
+<h3>{{ subject }}</h3><p>{{ category_title }} के {{ subject }} प्रश्नों का अभ्यास करें।</p>
+<a class="btn" href="{{ url_for('practice',class_no=class_no,subject=subject,exam_slug=exam_slug) }}">टेस्ट शुरू करें</a></article>
+{% endfor %}
+</div></section>
+{% endif %}
+
+{% if items %}<h2>Notes, PDF और अन्य सामग्री</h2><div class="content-list">
+{% for item in items %}<article class="content-card"><div class="content-card-top"><span class="status live">{{ item.price or 'Free' }}</span>{% if item.class_no %}<span class="muted">कक्षा {{ item.class_no }}</span>{% endif %}</div><h3>{{ item.title }}</h3><p>{{ item.description or 'अधिक जानकारी के लिए खोलें।' }}</p>{% if item.subject %}<small>विषय: {{ item.subject }}</small>{% endif %}{% if item.schedule_text %}<small class="schedule">{{ item.schedule_text }}</small>{% endif %}<div class="content-actions"><a class="btn btn-outline" href="{{ url_for('learning_item',item_id=item.id) }}">विवरण देखें</a></div></article>{% endfor %}
+</div>{% endif %}
+{% if not items and not question_groups %}<div class="table-card empty">इस परीक्षा की सामग्री अभी उपलब्ध नहीं है। Admin में नया प्रश्न जोड़ते समय परीक्षा चुनें या Content Manager में परीक्षा के नाम से सामग्री Publish करें।</div>{% endif %}
+{% endblock %}
