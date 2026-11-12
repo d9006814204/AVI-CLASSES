@@ -1,0 +1,15 @@
+AVI CLASSES – Dashboard / Course Catalogue Update
+
+इस अपडेट में:
+- Sidebar में यूज़र द्वारा माँगे गए 9 विकल्प रखे गए हैं: Dashboard, Live Classes, My Courses, My Test Series, Courses, Test Series, Study Materials, Practice, Answer Writing.
+- Popular Bihar Exams सेक्शन पहले से मौजूद रखा गया है।
+- NCERT Foundation और Class 5 से 10 को FREE दिखाया गया है।
+- उपलब्ध/यूज़र द्वारा तय किए गए Course cards: Bihar Police Constable ₹199, BSSC Inter Level ₹299, BPSC TRE-04 ₹199, CTET Class 1-5 ₹199, Full Excel ₹299, Photoshop ₹299.
+- Test Series cards ₹29 प्रत्येक के साथ जोड़े गए हैं: Mock Test, Bihar Police, BPSC, BSSC, TRE Teacher, STET/BTET.
+- सभी कार्ड पर AVI CLASSES ब्रांड-पिल और Powered by AVI CLASSES footer है।
+- Responsive desktop/mobile layout जोड़ा गया है।
+
+महत्वपूर्ण:
+यह अपडेट Dashboard/catalogue का visual और navigation update है। प्रत्येक individual Course/Test Series के लिए Razorpay order creation, payment verification, और paid access entitlement अभी इस ZIP में पूरा integrate नहीं किया गया है। मौजूदा /payment route membership subscription के लिए है; इसे अलग-अलग ₹29/₹199/₹299 खरीद के रूप में इस्तेमाल नहीं किया गया है। इसलिए Buy Now cards अभी संबंधित category/exam content page खोलते हैं; इन्हें live payment मानकर न चलाएँ। Live payment चालू करने से पहले item-wise order + verified payment + enrollment backend जोड़ना और Test Mode में जाँचना जरूरी है।
+
+पुराना database, प्रश्न और student records हटाए नहीं गए हैं। इस ZIP को deploy करने से पहले backup रखना उचित है।

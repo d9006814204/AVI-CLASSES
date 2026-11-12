@@ -4,20 +4,14 @@
   <a class="avi-dash-brand" href="{{ url_for('home') }}"><span>🎓</span><strong>AVI <b>CLASSES</b></strong><small>Learn • Practice • Crack</small></a>
   <nav class="avi-dash-nav">
    <a class="active" href="{{ url_for('home') }}">▦ <span>Dashboard</span></a>
-   <a href="{{ url_for('learning_category',category='live-batches') }}">▣ <span>Live Classes</span><i>LIVE</i></a>
+   <a href="{{ url_for('learning_category',category='live-batches') }}">▣ <span>Live Classes</span></a>
    <a href="{{ url_for('learning_category',category='courses') }}">▱ <span>My Courses</span></a>
+   <a href="{{ url_for('learning_category',category='test-series') }}">▤ <span>My Test Series</span></a>
+   <a href="{{ url_for('learning_category',category='courses') }}">▢ <span>Courses</span></a>
    <a href="{{ url_for('learning_category',category='test-series') }}">▤ <span>Test Series</span></a>
-   <a href="{{ url_for('learning_category',category='daily-quiz') }}">◎ <span>Mock Test / Quiz</span></a>
-   <a href="{{ url_for('practice',class_no=session.get('class_no') or 5,subject='Hindi') }}">▣ <span>Question Bank</span></a>
-   <a class="ncert-link" href="#ncert">▤ <span>NCERT</span></a>
-   <a href="{{ url_for('learning_category',category='current-affairs') }}">▥ <span>Current Affairs</span><i class="free-tag">FREE</i></a>
-   <a href="{{ url_for('learning_category',category='downloads') }}">⇩ <span>Study Material</span></a>
-   <a href="{{ url_for('learning_category',category='downloads') }}">⇩ <span>Downloads</span></a>
-   <a href="{{ url_for('learning_category',category='courses') }}">🛒 <span>My Purchase</span></a>
-   <a href="{{ url_for('learning_hub') }}">▣ <span>Wallet &amp; Payments</span></a>
-   <a href="{{ url_for('help_page') }}">♧ <span>Refer &amp; Earn</span></a>
-   <a href="{{ url_for('help_page') }}">ⓘ <span>Help &amp; Support</span></a>
-   <a href="{{ url_for('help_page') }}">⚙ <span>Settings</span></a>
+   <a href="{{ url_for('learning_category',category='downloads') }}">▧ <span>Study Materials</span></a>
+   <a href="{{ url_for('practice',class_no=session.get('class_no') or 5,subject='Hindi') }}">✎ <span>Practice</span></a>
+   <a href="{{ url_for('help_page') }}">▤ <span>Answer Writing</span></a>
   </nav>
   <a class="avi-bihar-offer" href="{{ url_for('learning_hub') }}"><span>🏆</span><b>Bihar Level<br>Exam Package</b><strong>₹199 <small>Join Now →</small></strong></a>
  </aside>
@@ -35,7 +29,40 @@
   <div class="avi-dash-lower"><section class="avi-dash-panel" id="ncert"><h3>▱ Explore by <em>NCERT</em></h3><div class="avi-class-cards"><a class="ncert-card" href="{{ url_for('practice',class_no=session.get('class_no') or 5,subject='Hindi') }}"><b>📚</b><strong>NCERT</strong></a>{% for c in range(5,11) %}<a class="class-card class-color-{{ loop.index }}" href="{{ url_for('practice',class_no=c,subject='Hindi') }}"><b>▤</b><strong>Class {{ c }}</strong><small>Open →</small></a>{% endfor %}</div></section>
    <section class="avi-dash-panel"><h3>🏅 Popular Bihar Exams <a href="{{ url_for('learning_hub') }}">View All →</a></h3><div class="avi-exam-cards">{% for e in ['BPSC','Bihar Police','BSSC','TRE Teacher','STET/BTET'] %}<a href="{{ url_for('learning_exam',slug=['bpsc','bihar-police','bssc','tre-teacher','stet-btet'][loop.index0]) }}"><b>{{ ['🎓','🛡️','👥','👨‍🏫','📖'][loop.index0] }}</b><strong>{{ e }}</strong></a>{% endfor %}</div></section>
   </div>
-  <div class="avi-course-promos"><a class="promo-mock" href="{{ url_for('learning_category',category='test-series') }}"><b>🎯</b><span><strong>Mock Test</strong><small>सभी परीक्षाओं के लिए</small><em>₹29 / प्रति टेस्ट</em></span></a><a class="promo-computer" href="{{ url_for('learning_hub') }}"><b>💻</b><span><strong>Full Excel Course</strong><small>Complete Excel Training</small><em>₹299 / 1 Month</em></span></a><a class="promo-design" href="{{ url_for('learning_category',category='courses',topic='photoshop') }}"><b>Ps</b><span><strong>Photoshop Course</strong><small>Photo Editing &amp; Design</small><em>अलग से खोलें →</em></span></a><a class="promo-design" href="{{ url_for('learning_category',category='courses',topic='coreldraw') }}"><b>CD</b><span><strong>CorelDRAW Course</strong><small>Vector &amp; Graphic Design</small><em>अलग से खोलें →</em></span></a><a class="promo-current" href="{{ url_for('learning_category',category='current-affairs') }}"><b>▤</b><span><strong>Current Affairs</strong><small>Daily • Bihar • Monthly</small><em>FREE</em></span></a></div>
+  <section class="avi-catalog-section">
+   <h2>🎓 Popular Paid Courses <small>AVI CLASSES</small></h2>
+   <div class="avi-product-grid">
+    <a class="avi-product-card purple" href="{{ url_for('learning_exam',slug='bpsc') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🏛️</div><h3>BPSC Exam Preparation</h3><p>परीक्षा तैयारी कोर्स</p><strong class="avi-price">कोर्स देखें</strong><span class="avi-buy">View Course →</span></a>
+    <a class="avi-product-card orange" href="{{ url_for('learning_exam',slug='bihar-police') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🛡️</div><h3>Bihar Police Constable</h3><p>Constable Exam</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card blue" href="{{ url_for('learning_exam',slug='bssc') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">👥</div><h3>BSSC Inter Level</h3><p>Inter Level Exam</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card pink" href="{{ url_for('learning_exam',slug='tre-teacher') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">👩‍🏫</div><h3>BPSC TRE-04</h3><p>Class 1 to 5</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card green" href="{{ url_for('learning_exam',slug='stet-btet') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">📖</div><h3>CTET Class 1 to 5</h3><p>Teacher Eligibility Test</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
+   </div>
+  </section>
+  <section class="avi-catalog-section">
+   <h2>📚 Explore by NCERT <small>FREE ACCESS</small></h2>
+   <div class="avi-free-grid">
+    {% for label in ['NCERT Foundation','Class 5','Class 6','Class 7','Class 8','Class 9','Class 10'] %}
+    <a class="avi-free-card" href="{{ url_for('practice',class_no=(5 if loop.index==1 else loop.index+3),subject='Hindi') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div>📚</div><h3>{{ label }}</h3><strong>FREE</strong><span class="avi-buy">Start Now →</span></a>
+    {% endfor %}
+   </div>
+  </section>
+  <section class="avi-catalog-section">
+   <h2>💻 Available Skill Courses <small>AVI CLASSES</small></h2>
+   <div class="avi-product-grid avi-skill-grid">
+    <a class="avi-product-card blue" href="{{ url_for('learning_category',category='courses',topic='excel') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">📊</div><h3>Full Excel Course</h3><p>Complete Excel Training</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card purple" href="{{ url_for('learning_category',category='courses',topic='photoshop') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🎨</div><h3>Photoshop Course</h3><p>Photo Editing &amp; Design</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
+   </div>
+  </section>
+  <section class="avi-catalog-section">
+   <h2>🎯 Test Series <small>₹29 EACH</small></h2>
+   <div class="avi-test-grid">
+    {% for name,slug in [('Mock Test','test-series'),('Bihar Police Test Series','bihar-police'),('BPSC Test Series','bpsc'),('BSSC Test Series','bssc'),('TRE Teacher Test Series','tre-teacher'),('STET/BTET Test Series','stet-btet')] %}
+    <a class="avi-test-card" href="{{ url_for('learning_category',category='test-series') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div>📋</div><h3>{{ name }}</h3><strong>₹29</strong><span class="avi-buy">Buy Now →</span></a>
+    {% endfor %}
+   </div>
+  </section>
+  <footer class="avi-dash-footer avi-powered">🎓 Powered by <b>AVI CLASSES</b> &nbsp; | &nbsp; Learn • Practice • Crack</footer>
   <footer class="avi-dash-footer">© 2026 AVI CLASSES • Learn • Practice • Crack</footer>
  </section>
 </div>
