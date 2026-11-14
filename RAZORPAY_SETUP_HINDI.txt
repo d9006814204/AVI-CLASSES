@@ -43,3 +43,26 @@ TESTING
 
 GO LIVE
 Do not switch to Live Mode until Razorpay account website/app review and required onboarding/KYC are complete, test integration works, and the merchant intentionally approves live billing. Replace test keys with live keys only at that point, and create/configure the webhook separately in Live Mode.
+
+
+AVI CLASSES – COURSE / TEST SERIES ONE-TIME PAYMENT (UPDATED)
+
+- Registration/Login FREE रहेगा। Login करने मात्र से Paid Course या Paid Test Series unlock नहीं होगी।
+- हर Paid LearningItem Course के लिए Admin Content Manager में Price (उदाहरण: 199 या ₹199) सेट करें।
+- Test Series की कीमत अभी ₹29 प्रति series है।
+- Student Buy Now दबाएगा तो backend Razorpay Order बनाएगा। Browser से आई कीमत पर भरोसा नहीं किया जाता; कीमत server तय करता है।
+- Unlock केवल server-side signature verification + Razorpay payment status `captured` और order amount match होने पर होगा।
+- Course खरीदने पर CourseEnrollment बनेगा और My Courses में दिखेगा। Test खरीदने पर उसी विद्यार्थी की Purchase record से series unlock होगी।
+- Admin Dashboard → Payment Records में भुगतान/ऑर्डर का रिकॉर्ड मिलेगा।
+- Razorpay Dashboard में automatic capture सक्षम रखें; webhook `/webhooks/razorpay` पर `payment.captured` और `order.paid` events भी configure करें। Webhook secret Render के `RAZORPAY_WEBHOOK_SECRET` से मेल खाना चाहिए।
+- Render पर पहले से मौजूद `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` का उपयोग होगा। `RAZORPAY_PLAN_ID` अब course/test खरीद के लिए आवश्यक नहीं है। Secrets को GitHub में न डालें।
+- पुराने Users, Questions, Attempts और LearningItems को delete/overwrite नहीं किया गया है। नई `purchase` table additive है।
+
+TEST CHECKLIST
+1. Razorpay TEST keys Render में रखें।
+2. Student login करके बिना खरीदे Course file URL खोलने की कोशिश करे: access deny होना चाहिए।
+3. Buy Now से test payment करें; Razorpay Dashboard में payment captured देखें।
+4. सफल verification के बाद course My Courses में आए और file खुले।
+5. Test Series पर ₹29 भुगतान करें; भुगतान से पहले LOCK और बाद में UNLOCK दिखना चाहिए।
+6. दूसरे student account से पहले student की खरीदी हुई सामग्री access नहीं होनी चाहिए।
+7. Admin → Payment Records में सही विद्यार्थी, product, amount और paid status दिखना चाहिए।

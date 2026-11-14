@@ -19,3 +19,9 @@ Deploy:
 - GitHub commit/push के बाद Render deploy करें।
 
 Syntax check: app.py py_compile सफल। Live Render/Razorpay testing इस environment से नहीं की गई है।
+
+
+अतिरिक्त UI बदलाव (14-11-2026):
+- सभी पेजों के ऊपर दिखने वाला 'प्रिंट करें' बटन हटाया गया।
+- Visitor Dashboard और Student Dashboard के sidebar से 'Practice' menu हटाया गया।
+- Practice page/route और NCERT प्रश्नों का अभ्यास लिंक अन्य जगहों पर सुरक्षित रखा गया है।

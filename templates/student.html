@@ -9,7 +9,6 @@
    <a href="{{ url_for('test_series_catalog') }}"><span>▤</span> Test Series</a>
    <a href="{{ url_for('learning_hub') }}"><span>▱</span> Courses</a>
    <a href="{{ url_for('learning_category',category='downloads') }}"><span>⇩</span> Study Material</a>
-   <a href="{{ url_for('practice',class_no=session.get('class_no') or 5,subject='Hindi') }}"><span>✎</span> Practice</a>
    <a href="{{ url_for('learning_category',category='daily-quiz') }}"><span>▧</span> Daily Quiz</a>
    <a href="{{ url_for('notifications_page') }}"><span>♧</span> Notifications</a>
    <a href="{{ url_for('help_page') }}"><span>ⓘ</span> Help &amp; Support</a>
@@ -22,6 +21,9 @@
   <div class="avi-final-stats"><div><b>🎓</b><span>Enrolled Courses<strong>{{ enrolled_count }}</strong></span></div><div><b>📋</b><span>Test Series<strong>{{ test_series_count }}</strong></span></div><div><b>✅</b><span>Tests Attempted<strong>{{ attempts|length }}</strong></span></div><div><b>🏆</b><span>Best Score<strong>{{ best_score }}%</strong></span></div></div>
   <section class="avi-final-section"><div class="avi-final-section-title"><h2>▣ My Courses <small>(मेरे खरीदे हुए कोर्स)</small></h2><a href="{{ url_for('my_courses') }}">View All →</a></div>
    {% if my_course_items %}<div class="avi-final-card-grid">{% for item in my_course_items %}<article class="avi-final-card"><div class="avi-final-card-logo">{{ item.icon or '🎓' }}</div><h3>{{ item.title }}</h3><p>{{ item.description or 'आपका खरीदा हुआ कोर्स' }}</p><span class="avi-owned-badge">✓ Enrolled</span><a class="avi-blue-button" href="{{ url_for('learning_item',item_id=item.id) }}">Open Course →</a></article>{% endfor %}</div>{% else %}<div class="avi-final-empty">अभी आपके My Courses में कोई खरीदा हुआ कोर्स नहीं है। खरीदने के बाद आपका कोर्स यहाँ दिखाई देगा। <a href="{{ url_for('learning_hub') }}">Courses देखें →</a></div>{% endif %}
+  </section>
+  <section class="avi-final-section"><div class="avi-final-section-title"><h2>▤ My Test Series <small>(मेरी खरीदी हुई टेस्ट सीरीज़)</small></h2><a href="{{ url_for('my_test_series') }}">View All →</a></div>
+   {% if my_test_catalog %}<div class="avi-final-card-grid avi-final-test-grid">{% for slug,title,icon in my_test_catalog %}<article class="avi-final-card"><div class="avi-final-card-logo">{{ icon }}</div><h3>{{ title }}</h3><span class="avi-owned-badge">✓ Purchased / Unlocked</span><a class="avi-blue-button" href="{{ url_for('exam_test_series',slug=slug) }}">Open Test Series →</a></article>{% endfor %}</div>{% else %}<div class="avi-final-empty">आपने अभी कोई Test Series नहीं खरीदी है। खरीदने के बाद यहाँ दिखाई देगी। <a href="{{ url_for('test_series_catalog') }}">Test Series खरीदें →</a></div>{% endif %}
   </section>
   <section class="avi-final-section"><div class="avi-final-section-title"><h2>▤ Test Series <small>(सभी टेस्ट सीरीज़)</small></h2><a href="{{ url_for('test_series_catalog') }}">View All →</a></div><div class="avi-final-card-grid avi-final-test-grid">
    {% for slug,title,icon in test_catalog %}<article class="avi-final-card"><span class="avi-card-ribbon">Bihar / Teaching Exam</span><div class="avi-final-card-logo">{{ icon }}</div><h3>{{ title }}</h3><ul><li>▣ 150 Questions</li><li>▤ Subject-wise Test</li><li>◉ Practice &amp; Result</li></ul><div class="avi-card-buy-row"><strong>₹29</strong><a class="avi-blue-button" href="{{ url_for('exam_test_series',slug=slug) }}">View Series →</a></div></article>{% endfor %}

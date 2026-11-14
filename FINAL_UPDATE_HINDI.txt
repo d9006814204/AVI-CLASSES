@@ -1,15 +1,25 @@
-AVI CLASSES – Dashboard / Course Catalogue Update
+AVI CLASSES – FINAL UPDATE (14 NOVEMBER 2026)
 
-इस अपडेट में:
-- Sidebar में यूज़र द्वारा माँगे गए 9 विकल्प रखे गए हैं: Dashboard, Live Classes, My Courses, My Test Series, Courses, Test Series, Study Materials, Practice, Answer Writing.
-- Popular Bihar Exams सेक्शन पहले से मौजूद रखा गया है।
-- NCERT Foundation और Class 5 से 10 को FREE दिखाया गया है।
-- उपलब्ध/यूज़र द्वारा तय किए गए Course cards: Bihar Police Constable ₹199, BSSC Inter Level ₹299, BPSC TRE-04 ₹199, CTET Class 1-5 ₹199, Full Excel ₹299, Photoshop ₹299.
-- Test Series cards ₹29 प्रत्येक के साथ जोड़े गए हैं: Mock Test, Bihar Police, BPSC, BSSC, TRE Teacher, STET/BTET.
-- सभी कार्ड पर AVI CLASSES ब्रांड-पिल और Powered by AVI CLASSES footer है।
-- Responsive desktop/mobile layout जोड़ा गया है।
+इस अपडेट में पहले के UI बदलाव और Course/Test Series के one-time payment lock system को शामिल किया गया है।
 
-महत्वपूर्ण:
-यह अपडेट Dashboard/catalogue का visual और navigation update है। प्रत्येक individual Course/Test Series के लिए Razorpay order creation, payment verification, और paid access entitlement अभी इस ZIP में पूरा integrate नहीं किया गया है। मौजूदा /payment route membership subscription के लिए है; इसे अलग-अलग ₹29/₹199/₹299 खरीद के रूप में इस्तेमाल नहीं किया गया है। इसलिए Buy Now cards अभी संबंधित category/exam content page खोलते हैं; इन्हें live payment मानकर न चलाएँ। Live payment चालू करने से पहले item-wise order + verified payment + enrollment backend जोड़ना और Test Mode में जाँचना जरूरी है।
+1. Student Dashboard sidebar से Practice menu हटाया गया है। Practice feature/प्रश्न डेटा को delete नहीं किया गया।
+2. Student-facing templates में Print button नहीं रखा गया है।
+3. Registration/Login free है। केवल Login करने से कोई Paid Course या Paid Test Series unlock नहीं होती।
+4. Admin द्वारा Courses category में प्रकाशित Paid LearningItem पर Buy Now दिखता है। Price item के `price` field से server-side पढ़ी जाती है।
+5. Test Series के लिए ₹29 का Razorpay Order बनता है।
+6. Razorpay signature, order amount, payment amount, order mapping और captured status server पर verify होने के बाद ही Purchase status paid होता है।
+7. Paid Course सफल भुगतान के बाद CourseEnrollment बनाकर My Courses में जोड़ा जाता है। Direct file access भी purchase check से सुरक्षित है।
+8. खरीदी हुई Test Series My Test Series और Dashboard में दिखाई देती है। बिना खरीद Test Series प्रश्न/टेस्ट शुरू नहीं किए जा सकते।
+9. Admin Dashboard में Payment Records पेज जोड़ा गया है।
+10. Database में additive `purchase` table जोड़ी गई है। Existing User, Question, Attempt, LearningItem और पुराने database records delete नहीं किए गए।
 
-पुराना database, प्रश्न और student records हटाए नहीं गए हैं। इस ZIP को deploy करने से पहले backup रखना उचित है।
+DEPLOYMENT NOTES
+- Render में मौजूदा RAZORPAY_KEY_ID और RAZORPAY_KEY_SECRET TEST keys रखें।
+- Webhook के लिए RAZORPAY_WEBHOOK_SECRET सेट करें और `/webhooks/razorpay` पर payment.captured event configure करें।
+- Razorpay में Automatic Capture सक्षम रखें, क्योंकि unlock के लिए captured payment आवश्यक है।
+- Course बनाने/अपलोड करने के लिए Admin → Learning Content Manager → Category `courses` चुनें और Price में 199 या ₹199 जैसे मान डालें।
+- GitHub पर secrets कभी commit न करें।
+- पहले TEST MODE में एक Student से Course और Test Series दोनों खरीदकर परीक्षण करें।
+
+IMPORTANT
+यह ZIP code update है; वास्तविक Razorpay payment तभी चलेगा जब Render environment में वैध Razorpay TEST/Live keys और सही webhook secret configured हों।
