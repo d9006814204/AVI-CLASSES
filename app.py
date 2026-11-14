@@ -80,6 +80,7 @@ SUBJECTS = ['Hindi','English','Mathematics','Science','Social Science','EVS','Ge
             'General Studies','Reasoning','Current Affairs','General Science','History','Geography',
             'Polity','Economics','Child Development & Pedagogy']
 EXAM_CATEGORIES = {
+    'mock-test': 'Mock Test',
     'bpsc': 'BPSC',
     'bihar-police': 'Bihar Police',
     'bssc': 'BSSC',
@@ -989,6 +990,22 @@ def learning_file(item_id):
     file_ext=os.path.splitext(item.file_name or item.stored_name)[1].lower()
     inline_image=request.args.get('inline')=='1' and file_ext in ('.jpg','.jpeg','.png','.webp','.gif')
     return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=not inline_image,download_name=item.file_name or item.stored_name)
+
+@app.route('/test-series/<slug>')
+@login_required('student')
+def exam_test_series(slug):
+    """Show 150-question capacity and subject-wise published question counts for each paid series."""
+    if slug not in EXAM_CATEGORIES:
+        abort(404)
+    subject_counts = {}
+    for subject_name in SUBJECTS:
+        subject_counts[subject_name] = Question.query.filter_by(
+            published=True, subject=subject_name, exam_slug=slug
+        ).count()
+    total = sum(subject_counts.values())
+    return render_template('exam_test_slots.html', slug=slug,
+        exam_title=EXAM_CATEGORIES[slug], subject_counts=subject_counts,
+        total=total, required=150, ready=(total >= 150))
 
 @app.route('/mock-test')
 @login_required('student')

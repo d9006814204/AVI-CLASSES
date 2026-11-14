@@ -57,8 +57,8 @@
   <section class="avi-catalog-section">
    <h2>🎯 Test Series <small>₹29 EACH</small></h2>
    <div class="avi-test-grid">
-    {% for name,slug in [('Mock Test','test-series'),('Bihar Police Test Series','bihar-police'),('BPSC Test Series','bpsc'),('BSSC Test Series','bssc'),('TRE Teacher Test Series','tre-teacher'),('STET/BTET Test Series','stet-btet')] %}
-    <a class="avi-test-card" href="{{ url_for('learning_category',category='test-series') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div>📋</div><h3>{{ name }}</h3><strong>₹29</strong><span class="avi-buy">Buy Now →</span></a>
+    {% for name,slug in [('Mock Test','mock-test'),('Bihar Police Test Series','bihar-police'),('BPSC Test Series','bpsc'),('BSSC Test Series','bssc'),('TRE Teacher Test Series','tre-teacher'),('STET/BTET Test Series','stet-btet')] %}
+    <a class="avi-test-card" href="{{ url_for('exam_test_series',slug=slug) }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div>📋</div><h3>{{ name }}</h3><strong>₹29</strong><span class="avi-buy">Buy Now →</span></a>
     {% endfor %}
    </div>
   </section>
