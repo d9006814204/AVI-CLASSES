@@ -948,8 +948,20 @@ def bulk_template(fmt):
     abort(404)
 
 def one_time_razorpay_client():
-    if not razorpay or not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
-        raise RuntimeError('Razorpay one-time payment keys are not configured.')
+    """Build a Razorpay client for one-time Orders API payments (not Subscriptions)."""
+    if not razorpay:
+        raise RuntimeError('Razorpay Python SDK is not installed. Check requirements.txt and redeploy.')
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        app.logger.error(
+            'Razorpay one-time config missing: sdk=%s key_id_present=%s key_secret_present=%s',
+            bool(razorpay), bool(RAZORPAY_KEY_ID), bool(RAZORPAY_KEY_SECRET)
+        )
+        raise RuntimeError('Razorpay Key ID or Key Secret is missing in the server environment.')
+    # A Test Key ID must be paired with its Test Secret, and likewise for Live.
+    if RAZORPAY_KEY_ID.startswith('rzp_test_') and RAZORPAY_KEY_SECRET.startswith('rzp_live_'):
+        raise RuntimeError('Razorpay Test Key ID and Live Key Secret do not match.')
+    if RAZORPAY_KEY_ID.startswith('rzp_live_') and RAZORPAY_KEY_SECRET.startswith('rzp_test_'):
+        raise RuntimeError('Razorpay Live Key ID and Test Key Secret do not match.')
     return razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 
@@ -1041,24 +1053,53 @@ def purchase_create():
     if has_purchase(session['user_id'], kind, product_key):
         target = ((url_for('learning_item', item_id=int(product_key)) if product_key.isdigit() else url_for('learning_exam', slug=product_key)) if kind == 'course' else url_for('exam_test_series', slug=product_key))
         return jsonify(ok=True, already_paid=True, redirect=target)
+    if not isinstance(amount, int) or amount <= 0:
+        app.logger.error('Invalid one-time payment amount: kind=%s product_key=%s amount=%r', kind, product_key, amount)
+        return jsonify(ok=False, message='इस उत्पाद की भुगतान राशि सही नहीं है। Admin से संपर्क करें।'), 400
+
     try:
-        order = one_time_razorpay_client().order.create(data={
-            'amount': amount, 'currency': 'INR', 'receipt': f'avi-{session["user_id"]}-{secrets.token_hex(5)}',
-            'notes': {'avi_user_id': str(session['user_id']), 'product_type': kind,
-                      'product_key': product_key, 'product_title': title[:180]}
-        })
-        purchase = Purchase(user_id=session['user_id'], product_type=kind,
+        client = one_time_razorpay_client()
+        order_data = {
+            'amount': amount,  # INR paise: ₹29 = 2900, ₹299 = 29900
+            'currency': 'INR',
+            'receipt': f'avi-{session["user_id"]}-{secrets.token_hex(5)}',
+            'notes': {
+                'avi_user_id': str(session['user_id']),
+                'product_type': kind,
+                'product_key': product_key,
+                'product_title': title[:180],
+            },
+        }
+        order = client.order.create(data=order_data)
+        order_id = str((order or {}).get('id', '')).strip()
+        if not order_id:
+            raise RuntimeError('Razorpay response did not contain an order ID.')
+
+        purchase = Purchase(
+            user_id=session['user_id'], product_type=kind,
             product_key=product_key, product_title=title, amount_paise=amount,
-            razorpay_order_id=order['id'], status='created')
+            razorpay_order_id=order_id, status='created'
+        )
         db.session.add(purchase)
         db.session.commit()
-        return jsonify(ok=True, order_id=order['id'], amount=amount, currency='INR',
+        app.logger.info('Razorpay one-time order created: order_id=%s amount_paise=%s', order_id, amount)
+        return jsonify(
+            ok=True, order_id=order_id, amount=amount, currency='INR',
             key_id=RAZORPAY_KEY_ID, name='AVI CLASSES', description=title,
-            verify_url=url_for('purchase_verify'), csrf_token=generate_csrf())
-    except Exception:
+            verify_url=url_for('purchase_verify'), csrf_token=generate_csrf()
+        )
+    except Exception as exc:
         db.session.rollback()
-        app.logger.exception('Could not create Razorpay one-time order')
-        return jsonify(ok=False, message='भुगतान ऑर्डर नहीं बन सका। Razorpay Keys जाँचें।'), 503
+        # Log the provider's actual error so Render Logs show whether this is
+        # authentication, account activation, invalid amount, or a network issue.
+        app.logger.exception(
+            'Could not create Razorpay one-time order: error_type=%s error=%s',
+            type(exc).__name__, str(exc)[:500]
+        )
+        return jsonify(
+            ok=False,
+            message='Razorpay से पेमेंट ऑर्डर नहीं बन सका। Render Logs में इस प्रयास की असली Error देखें।'
+        ), 503
 
 
 @app.route('/purchase/verify', methods=['POST'])
