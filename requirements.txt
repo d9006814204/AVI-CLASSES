@@ -9,4 +9,3 @@ pdfplumber>=0.11,<1.0
 reportlab>=4.0,<5.0
 razorpay>=1.4.2,<2.0
 setuptools>=68,<81
-razorpay>=1.4.2,<2.0
