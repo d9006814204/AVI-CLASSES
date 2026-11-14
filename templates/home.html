@@ -31,11 +31,11 @@
   <section class="avi-catalog-section">
    <h2>🎓 Popular Paid Courses <small>AVI CLASSES</small></h2>
    <div class="avi-product-grid">
-    <a class="avi-product-card purple" href="{{ url_for('learning_exam',slug='bpsc') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🏛️</div><h3>BPSC Exam Preparation</h3><p>परीक्षा तैयारी कोर्स</p><strong class="avi-price">कोर्स देखें</strong><span class="avi-buy">View Course →</span></a>
-    <a class="avi-product-card orange" href="{{ url_for('learning_exam',slug='bihar-police') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🛡️</div><h3>Bihar Police Constable</h3><p>Constable Exam</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
-    <a class="avi-product-card blue" href="{{ url_for('learning_exam',slug='bssc') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">👥</div><h3>BSSC Inter Level</h3><p>Inter Level Exam</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
-    <a class="avi-product-card pink" href="{{ url_for('learning_exam',slug='tre-teacher') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">👩‍🏫</div><h3>BPSC TRE-04</h3><p>Class 1 to 5</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
-    <a class="avi-product-card green" href="{{ url_for('learning_exam',slug='stet-btet') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">📖</div><h3>CTET Class 1 to 5</h3><p>Teacher Eligibility Test</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card purple" href="{{ url_for('checkout_page',kind='course',key='bpsc') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🏛️</div><h3>BPSC Exam Preparation</h3><p>परीक्षा तैयारी कोर्स</p><strong class="avi-price">कोर्स देखें</strong><span class="avi-buy">View Course →</span></a>
+    <a class="avi-product-card orange" href="{{ url_for('checkout_page',kind='course',key='bihar-police') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🛡️</div><h3>Bihar Police Constable</h3><p>Constable Exam</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card blue" href="{{ url_for('checkout_page',kind='course',key='bssc') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">👥</div><h3>BSSC Inter Level</h3><p>Inter Level Exam</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card pink" href="{{ url_for('checkout_page',kind='course',key='tre-teacher') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">👩‍🏫</div><h3>BPSC TRE-04</h3><p>Class 1 to 5</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card green" href="{{ url_for('checkout_page',kind='course',key='ctet') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">📖</div><h3>CTET Class 1 to 5</h3><p>Teacher Eligibility Test</p><strong class="avi-price">₹199</strong><span class="avi-buy">Buy Now →</span></a>
    </div>
   </section>
   <section class="avi-catalog-section">
@@ -49,15 +49,15 @@
   <section class="avi-catalog-section">
    <h2>💻 Available Skill Courses <small>AVI CLASSES</small></h2>
    <div class="avi-product-grid avi-skill-grid">
-    <a class="avi-product-card blue" href="{{ url_for('learning_category',category='courses',topic='excel') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">📊</div><h3>Full Excel Course</h3><p>Complete Excel Training</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
-    <a class="avi-product-card purple" href="{{ url_for('learning_category',category='courses',topic='photoshop') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🎨</div><h3>Photoshop Course</h3><p>Photo Editing &amp; Design</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card blue" href="{{ url_for('checkout_page',kind='course',key='full-excel') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">📊</div><h3>Full Excel Course</h3><p>Complete Excel Training</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-product-card purple" href="{{ url_for('checkout_page',kind='course',key='photoshop-coreldraw') }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div class="avi-product-art">🎨</div><h3>Photoshop Course</h3><p>Photo Editing &amp; Design</p><strong class="avi-price">₹299</strong><span class="avi-buy">Buy Now →</span></a>
    </div>
   </section>
   <section class="avi-catalog-section">
    <h2>🎯 Test Series <small>₹29 EACH</small></h2>
    <div class="avi-test-grid">
     {% for name,slug in [('Mock Test','mock-test'),('Bihar Police Test Series','bihar-police'),('BPSC Test Series','bpsc'),('BSSC Test Series','bssc'),('TRE Teacher Test Series','tre-teacher'),('STET/BTET Test Series','stet-btet')] %}
-    <a class="avi-test-card" href="{{ url_for('exam_test_series',slug=slug) }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div>📋</div><h3>{{ name }}</h3><strong>₹29</strong><span class="avi-buy">Buy Now →</span></a>
+    <a class="avi-test-card" href="{{ url_for('checkout_page',kind='test',key=slug) }}"><span class="avi-brand-pill">🎓 AVI <b>CLASSES</b></span><div>📋</div><h3>{{ name }}</h3><strong>₹29</strong><span class="avi-buy">Buy Now →</span></a>
     {% endfor %}
    </div>
   </section>

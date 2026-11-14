@@ -1,0 +1,19 @@
+AVI CLASSES - COMMON COURSE CHECKOUT UPDATE
+
+What changed:
+1. Added one common checkout page matching the supplied checkout reference.
+2. All paid course cards in the student dashboard and home catalog now open this checkout page.
+3. Individual paid LearningItem courses also open the same checkout page.
+4. Test Series purchase links use the same checkout page as well.
+5. Pay Now creates a Razorpay one-time order on the server and verifies the captured payment signature and amount before marking the purchase paid.
+6. Catalog course purchases are listed in My Courses and the student dashboard after successful verification.
+7. Course-specific learning pages and exam practice accept the corresponding verified course purchase.
+
+Catalog prices configured:
+BPSC ₹199; Bihar Police ₹199; BSSC ₹299; BPSC TRE-04 ₹199; CTET ₹199; STET/BTET ₹199;
+Computer Classes ₹299; Photoshop + CorelDRAW ₹199; Full Excel ₹299.
+Test Series remain ₹29 each.
+
+Before going live, configure RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET in Render.
+Use Razorpay Test Mode first. A live payment has not been executed from this development environment.
+Existing database tables and student/question rows were not intentionally deleted or reset.

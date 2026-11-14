@@ -86,6 +86,7 @@ EXAM_CATEGORIES = {
     'bssc': 'BSSC',
     'tre-teacher': 'TRE Teacher',
     'stet-btet': 'STET/BTET',
+    'ctet': 'CTET',
     'mock-test': 'Mock Test',
 }
 
@@ -133,6 +134,20 @@ class Attempt(db.Model):
     id=db.Column(db.Integer,primary_key=True); user_id=db.Column(db.Integer,db.ForeignKey('user.id'),nullable=False,index=True)
     class_no=db.Column(db.Integer,nullable=False); subject=db.Column(db.String(80),nullable=False)
     score=db.Column(db.Integer,nullable=False); total=db.Column(db.Integer,nullable=False); created_at=db.Column(db.DateTime,default=datetime.utcnow)
+
+
+# One-time paid course catalog. Every catalog course uses the same checkout flow.
+COURSE_PRODUCTS = {
+    'bpsc': ('BPSC Exam Preparation', 19900, '🏛️', 'learning_exam', {'slug': 'bpsc'}),
+    'bihar-police': ('Bihar Police Constable', 19900, '🛡️', 'learning_exam', {'slug': 'bihar-police'}),
+    'bssc': ('BSSC Inter Level', 29900, '👥', 'learning_exam', {'slug': 'bssc'}),
+    'tre-teacher': ('BPSC TRE-04 (Class 1 to 5)', 19900, '👩‍🏫', 'learning_exam', {'slug': 'tre-teacher'}),
+    'ctet': ('CTET Class 1 to 5', 19900, '📚', 'learning_exam', {'slug': 'ctet'}),
+    'stet-btet': ('STET / BTET', 19900, '🎓', 'learning_exam', {'slug': 'stet-btet'}),
+    'computer-classes': ('Computer Classes (MS Office / MS Excel)', 29900, '💻', 'learning_category', {'category': 'courses'}),
+    'photoshop-coreldraw': ('Photoshop + CorelDRAW', 19900, '🎨', 'learning_category', {'category': 'courses', 'topic': 'design'}),
+    'full-excel': ('Full Excel Course', 29900, '📊', 'learning_category', {'category': 'courses', 'topic': 'excel'}),
+}
 
 CONTENT_CATEGORIES = {
     'test-series': 'Test Series', 'current-affairs': 'Current Affairs',
@@ -750,7 +765,7 @@ def razorpay_webhook():
             purchase.status = 'paid'
             purchase.razorpay_payment_id = payment_id
             purchase.paid_at = datetime.utcnow()
-            if purchase.product_type == 'course':
+            if purchase.product_type == 'course' and purchase.product_key.isdigit():
                 ensure_course_enrollment(purchase.user_id, int(purchase.product_key))
             db.session.commit()
     if subscription_id:
@@ -820,8 +835,8 @@ def question_bank():
     if cn.isdigit() and int(cn) in CLASSES: query=query.filter_by(class_no=int(cn))
     if sub in SUBJECTS: query=query.filter_by(subject=sub)
     if exam_slug in EXAM_CATEGORIES:
-        if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', exam_slug):
-            flash('इस Test Series को खोलने के लिए पहले खरीदें।', 'warning')
+        if session.get('role') != 'admin' and not (has_purchase(session['user_id'], 'test', exam_slug) or has_purchase(session['user_id'], 'course', exam_slug)):
+            flash('इस Course / Test Series को खोलने के लिए पहले खरीदें।', 'warning')
             return redirect(url_for('exam_test_series', slug=exam_slug))
         query=query.filter_by(exam_slug=exam_slug)
     if status=='live': query=query.filter_by(published=True)
@@ -951,9 +966,50 @@ def course_price_paise(item):
     return max(0, int(round(float(match.group()) * 100)))
 
 
+def has_learning_item_access(user_id, item):
+    if has_purchase(user_id, 'course', str(item.id)):
+        return True
+    if course_price_paise(item) <= 0 and CourseEnrollment.query.filter_by(user_id=user_id, item_id=item.id).first():
+        return True
+    text_blob = ' '.join(str(x or '') for x in (item.title, item.description, item.subject, item.file_name)).lower()
+    if 'excel' in text_blob and has_purchase(user_id, 'course', 'full-excel'):
+        return True
+    if any(word in text_blob for word in ('photoshop', 'coreldraw', 'corel draw')) and has_purchase(user_id, 'course', 'photoshop-coreldraw'):
+        return True
+    if any(word in text_blob for word in ('computer', 'ms office', 'microsoft word', 'powerpoint', 'ms excel')) and has_purchase(user_id, 'course', 'computer-classes'):
+        return True
+    return False
+
+
 def ensure_course_enrollment(user_id, item_id):
     if not CourseEnrollment.query.filter_by(user_id=user_id, item_id=item_id).first():
         db.session.add(CourseEnrollment(user_id=user_id, item_id=item_id))
+
+
+@app.route('/checkout/<kind>/<key>')
+@login_required('student')
+def checkout_page(kind, key):
+    if kind == 'course':
+        if key.isdigit():
+            item = LearningItem.query.filter_by(id=int(key), category='courses', published=True).first_or_404()
+            title, amount, icon = item.title, course_price_paise(item), item.icon or '🎓'
+            if amount <= 0:
+                return redirect(url_for('learning_item', item_id=item.id))
+            product_key = str(item.id)
+        else:
+            product = COURSE_PRODUCTS.get(key)
+            if not product: abort(404)
+            title, amount, icon = product[0], product[1], product[2]
+            product_key = key
+    elif kind == 'test':
+        if key not in EXAM_CATEGORIES: abort(404)
+        title, amount, icon, product_key = EXAM_CATEGORIES[key] + ' Test Series', 2900, '📝', key
+    else:
+        abort(404)
+    if has_purchase(session['user_id'], kind, product_key):
+        return redirect(url_for('learning_item', item_id=int(product_key)) if kind == 'course' and product_key.isdigit() else (url_for('learning_exam', slug=product_key) if kind == 'course' else url_for('exam_test_series', slug=product_key)))
+    return render_template('checkout.html', kind=kind, product_key=product_key,
+                           title=title, amount=amount, icon=icon)
 
 
 @app.route('/purchase/create', methods=['POST'])
@@ -963,15 +1019,17 @@ def purchase_create():
     kind = str(data.get('kind', '')).strip()
     key = str(data.get('key', '')).strip()
     if kind == 'course':
-        if not key.isdigit(): abort(404)
-        item = LearningItem.query.filter_by(id=int(key), category='courses', published=True).first_or_404()
-        amount = course_price_paise(item)
-        title = item.title
-        product_key = str(item.id)
-        if amount <= 0:
-            ensure_course_enrollment(session['user_id'], item.id)
-            db.session.commit()
-            return jsonify(ok=True, free=True, redirect=url_for('learning_item', item_id=item.id))
+        if key.isdigit():
+            item = LearningItem.query.filter_by(id=int(key), category='courses', published=True).first_or_404()
+            amount, title, product_key = course_price_paise(item), item.title, str(item.id)
+            if amount <= 0:
+                ensure_course_enrollment(session['user_id'], item.id)
+                db.session.commit()
+                return jsonify(ok=True, free=True, redirect=url_for('learning_item', item_id=item.id))
+        else:
+            product = COURSE_PRODUCTS.get(key)
+            if not product: abort(404)
+            title, amount, product_key = product[0], product[1], key
     elif kind == 'test':
         if key not in EXAM_CATEGORIES: abort(404)
         amount = 2900
@@ -981,7 +1039,7 @@ def purchase_create():
         abort(400)
 
     if has_purchase(session['user_id'], kind, product_key):
-        target = url_for('learning_item', item_id=int(product_key)) if kind == 'course' else url_for('exam_test_series', slug=product_key)
+        target = ((url_for('learning_item', item_id=int(product_key)) if product_key.isdigit() else url_for('learning_exam', slug=product_key)) if kind == 'course' else url_for('exam_test_series', slug=product_key))
         return jsonify(ok=True, already_paid=True, redirect=target)
     try:
         order = one_time_razorpay_client().order.create(data={
@@ -1014,7 +1072,7 @@ def purchase_verify():
     if not purchase or not payment_id or not signature:
         return jsonify(ok=False, message='भुगतान विवरण मेल नहीं खाता।'), 400
     if purchase.status == 'paid':
-        return jsonify(ok=True, paid=True, redirect=(url_for('learning_item', item_id=int(purchase.product_key)) if purchase.product_type == 'course' else url_for('exam_test_series', slug=purchase.product_key)))
+        return jsonify(ok=True, paid=True, redirect=((url_for('learning_item', item_id=int(purchase.product_key)) if purchase.product_key.isdigit() else url_for('learning_exam', slug=purchase.product_key)) if purchase.product_type == 'course' else url_for('exam_test_series', slug=purchase.product_key)))
     try:
         expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), f'{order_id}|{payment_id}'.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, signature):
@@ -1029,10 +1087,10 @@ def purchase_verify():
         purchase.razorpay_payment_id = payment_id
         purchase.status = 'paid'
         purchase.paid_at = datetime.utcnow()
-        if purchase.product_type == 'course':
+        if purchase.product_type == 'course' and purchase.product_key.isdigit():
             ensure_course_enrollment(purchase.user_id, int(purchase.product_key))
         db.session.commit()
-        target = url_for('learning_item', item_id=int(purchase.product_key)) if purchase.product_type == 'course' else url_for('exam_test_series', slug=purchase.product_key)
+        target = (url_for('learning_item', item_id=int(purchase.product_key)) if purchase.product_key.isdigit() else url_for('learning_exam', slug=purchase.product_key)) if purchase.product_type == 'course' else url_for('exam_test_series', slug=purchase.product_key)
         return jsonify(ok=True, paid=True, redirect=target, message='भुगतान सफल! आपका कंटेंट Unlock हो गया है।')
     except Exception:
         db.session.rollback()
@@ -1070,13 +1128,15 @@ def student():
         ('Photoshop + CorelDRAW','Photo Editing & Graphic Design',199,'🎨'),
         ('Full Excel Course','Complete Excel Training',299,'📊'),
     ]
+    paid_course_slugs={p.product_key for p in Purchase.query.filter_by(user_id=session['user_id'],product_type='course',status='paid').all() if not p.product_key.isdigit()}
+    my_paid_catalog=[(slug, COURSE_PRODUCTS[slug][0], COURSE_PRODUCTS[slug][2], COURSE_PRODUCTS[slug][3], COURSE_PRODUCTS[slug][4]) for slug in COURSE_PRODUCTS if slug in paid_course_slugs]
     paid_test_slugs={p.product_key for p in Purchase.query.filter_by(user_id=session['user_id'],product_type='test',status='paid').all()}
     my_test_catalog=[(slug,title,icon) for slug,title,icon in test_catalog if slug in paid_test_slugs]
     billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
     return render_template('student.html',subjects=subjects,attempts=attempts,courses=courses,
                            enrolled_ids=enrolled_ids,my_course_items=my_course_items,
-                           enrolled_count=len(my_course_items),best_score=best_score,
-                           test_series_count=len(test_catalog),test_catalog=test_catalog,
+                           enrolled_count=len(my_course_items)+len(my_paid_catalog),best_score=best_score,
+                           my_paid_catalog=my_paid_catalog,test_series_count=len(test_catalog),test_catalog=test_catalog,
                            my_test_catalog=my_test_catalog,paid_course_catalog=paid_course_catalog,billing=billing)
 
 @app.route('/my-courses')
@@ -1087,7 +1147,9 @@ def my_courses():
     allowed_ids=paid_ids | enrolled_ids
     candidates=LearningItem.query.filter(LearningItem.id.in_(allowed_ids),LearningItem.category=='courses',LearningItem.published.is_(True)).order_by(LearningItem.created_at.desc()).all() if allowed_ids else []
     items=[item for item in candidates if course_price_paise(item)==0 or item.id in paid_ids]
-    return render_template('my_courses.html',items=items)
+    paid_slugs={p.product_key for p in Purchase.query.filter_by(user_id=session['user_id'],product_type='course',status='paid').all() if not p.product_key.isdigit()}
+    catalog_items=[(slug, COURSE_PRODUCTS[slug][0], COURSE_PRODUCTS[slug][2], COURSE_PRODUCTS[slug][3], COURSE_PRODUCTS[slug][4]) for slug in COURSE_PRODUCTS if slug in paid_slugs]
+    return render_template('my_courses.html',items=items,catalog_items=catalog_items)
 
 @app.route('/my-test-series')
 @login_required('student')
@@ -1129,7 +1191,7 @@ def learning_exam(slug):
             func.lower(LearningItem.description).like(f'%{title.lower()}%'),
             func.lower(LearningItem.subject).like(f'%{title.lower()}%')))
     items = query.order_by(LearningItem.created_at.desc()).all()
-    has_access = session.get('role') == 'admin' or has_purchase(session['user_id'], 'test', slug)
+    has_access = session.get('role') == 'admin' or has_purchase(session['user_id'], 'course', slug) or has_purchase(session['user_id'], 'test', slug)
     questions = Question.query.filter_by(exam_slug=slug, published=True).all() if has_access else []
     groups = db.session.query(Question.class_no, Question.subject, func.count(Question.id)).filter_by(
         exam_slug=slug, published=True).group_by(Question.class_no, Question.subject).order_by(
@@ -1165,7 +1227,7 @@ def learning_category(category):
 @login_required('student')
 def learning_item(item_id):
     item=LearningItem.query.filter_by(id=item_id,published=True).first_or_404()
-    enrolled=bool((course_price_paise(item) == 0 and CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first()) or has_purchase(session['user_id'], 'course', str(item.id)))
+    enrolled=bool(session.get('role') == 'admin' or has_learning_item_access(session['user_id'], item))
     return render_template('learning_item.html',item=item,enrolled=enrolled,price_paise=course_price_paise(item))
 
 @app.route('/learning/enroll/<int:item_id>',methods=['POST'])
@@ -1187,7 +1249,7 @@ def enroll_course(item_id):
 def learning_file(item_id):
     item=LearningItem.query.filter_by(id=item_id,published=True).first_or_404()
     if not item.stored_name: abort(404)
-    if item.category=='courses' and session.get('role') != 'admin' and not ((course_price_paise(item) == 0 and CourseEnrollment.query.filter_by(user_id=session['user_id'],item_id=item.id).first()) or has_purchase(session['user_id'], 'course', str(item.id))): abort(403)
+    if item.category=='courses' and session.get('role') != 'admin' and not has_learning_item_access(session['user_id'], item): abort(403)
     file_ext=os.path.splitext(item.file_name or item.stored_name)[1].lower()
     inline_image=request.args.get('inline')=='1' and file_ext in ('.jpg','.jpeg','.png','.webp','.gif')
     return send_from_directory(UPLOAD_DIR,item.stored_name,as_attachment=not inline_image,download_name=item.file_name or item.stored_name)
@@ -1283,8 +1345,8 @@ def practice():
     query=Question.query.filter_by(published=True,class_no=int(cn),subject=subject)
     if chapter: query=query.filter_by(chapter=chapter)
     if exam_slug in EXAM_CATEGORIES:
-        if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', exam_slug):
-            flash('इस Test Series को खोलने के लिए पहले खरीदें।', 'warning')
+        if session.get('role') != 'admin' and not (has_purchase(session['user_id'], 'test', exam_slug) or has_purchase(session['user_id'], 'course', exam_slug)):
+            flash('इस Course / Test Series को खोलने के लिए पहले खरीदें।', 'warning')
             return redirect(url_for('exam_test_series', slug=exam_slug))
         query=query.filter_by(exam_slug=exam_slug)
     questions=query.order_by(func.random()).limit(20).all()
@@ -1299,7 +1361,7 @@ def check_answers():
         if not raw.isdigit(): continue
         q=Question.query.filter_by(id=int(raw),published=True).first()
         if q:
-            if q.exam_slug in EXAM_CATEGORIES and session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', q.exam_slug):
+            if q.exam_slug in EXAM_CATEGORIES and session.get('role') != 'admin' and not (has_purchase(session['user_id'], 'test', q.exam_slug) or has_purchase(session['user_id'], 'course', q.exam_slug)):
                 abort(403)
             selected=request.form.get('q'+raw,''); correct=selected==q.answer; score+=int(correct); subject=q.subject; results.append((q,selected,correct))
     if results:
