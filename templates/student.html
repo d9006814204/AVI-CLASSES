@@ -29,7 +29,16 @@
    {% for slug,title,icon in test_catalog %}<article class="avi-final-card"><span class="avi-card-ribbon">Bihar / Teaching Exam</span><div class="avi-final-card-logo">{{ icon }}</div><h3>{{ title }}</h3><ul><li>▣ 150 Questions</li><li>▤ Subject-wise Test</li><li>◉ Practice &amp; Result</li></ul><div class="avi-card-buy-row"><strong>₹29</strong><a class="avi-blue-button" href="{{ url_for('exam_test_series',slug=slug) }}">View Series →</a></div></article>{% endfor %}
   </div></section>
   <section class="avi-final-section"><div class="avi-final-section-title"><h2>▱ Courses <small>(खरीदने के लिए उपलब्ध)</small></h2><a href="{{ url_for('learning_hub') }}">View All →</a></div><div class="avi-final-card-grid avi-final-course-grid">
-   {% for title,subtitle,price,icon in paid_course_catalog %}<article class="avi-final-card"><div class="avi-final-card-logo">{{ icon }}</div><h3>{{ title }}</h3><p>{{ subtitle }}</p><div class="avi-card-buy-row"><strong>₹{{ price }}</strong><a class="avi-blue-button" href="{{ url_for('learning_hub') }}">Details →</a></div></article>{% endfor %}
+   {% for title,subtitle,price,icon in paid_course_catalog %}<article class="avi-final-card"><div class="avi-final-card-logo">{{ icon }}</div><h3>{{ title }}</h3><p>{{ subtitle }}</p><div class="avi-card-buy-row"><strong>₹{{ price }}</strong>{% if title == 'BPSC Exam Preparation' %}<a class="avi-blue-button" href="{{ url_for('learning_exam',slug='bpsc') }}">Details →</a>
+    {% elif title == 'Bihar Police Constable' %}<a class="avi-blue-button" href="{{ url_for('learning_exam',slug='bihar-police') }}">Details →</a>
+    {% elif title == 'BSSC Inter Level' %}<a class="avi-blue-button" href="{{ url_for('learning_exam',slug='bssc') }}">Details →</a>
+    {% elif title == 'BPSC TRE-04 (Class 1 to 5)' %}<a class="avi-blue-button" href="{{ url_for('learning_exam',slug='tre-teacher') }}">Details →</a>
+    {% elif title == 'CTET Class 1 to 5' %}<a class="avi-blue-button" href="{{ url_for('learning_category',category='courses') }}">Details →</a>
+    {% elif title == 'STET / BTET' %}<a class="avi-blue-button" href="{{ url_for('learning_exam',slug='stet-btet') }}">Details →</a>
+    {% elif title == 'Computer Classes (MS Office / MS Excel)' %}<a class="avi-blue-button" href="{{ url_for('learning_hub') }}">Details →</a>
+    {% elif title == 'Photoshop + CorelDRAW' %}<a class="avi-blue-button" href="{{ url_for('learning_category',category='courses',topic='design') }}">Details →</a>
+    {% elif title == 'Full Excel Course' %}<a class="avi-blue-button" href="{{ url_for('learning_category',category='courses',topic='excel') }}">Details →</a>
+    {% else %}<a class="avi-blue-button" href="{{ url_for('learning_category',category='courses') }}">Details →</a>{% endif %}</div></article>{% endfor %}
   </div></section>
   <footer class="avi-dash-footer">© 2026 AVI CLASSES • Learn • Practice • Crack</footer>
  </section>
