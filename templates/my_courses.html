@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% block content %}
+<div class="avi-catalog-page"><div class="avi-catalog-heading"><div><small>AVI CLASSES • STUDENT LIBRARY</small><h1>My Courses</h1><p>आपके खरीदे और Enroll किए हुए कोर्स यहाँ मिलेंगे।</p></div><a class="avi-blue-button" href="{{ url_for('learning_hub') }}">Explore Courses →</a></div>
+{% if items %}<div class="avi-final-card-grid">{% for item in items %}<article class="avi-final-card"><div class="avi-final-card-logo">{{ item.icon or '🎓' }}</div><h3>{{ item.title }}</h3><p>{{ item.description or '' }}</p><span class="avi-owned-badge">✓ Enrolled</span><a class="avi-blue-button" href="{{ url_for('learning_item',item_id=item.id) }}">Open Course →</a></article>{% endfor %}</div>{% else %}<div class="avi-final-empty">अभी आपने कोई कोर्स नहीं खरीदा है। खरीदे हुए कोर्स इसी पेज पर दिखाई देंगे।<br><a href="{{ url_for('learning_hub') }}">सभी Courses देखें →</a></div>{% endif %}</div>
+{% endblock %}

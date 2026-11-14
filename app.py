@@ -912,9 +912,53 @@ def student():
     enrolled=CourseEnrollment.query.filter_by(user_id=session['user_id']).all()
     enrolled_ids={e.item_id for e in enrolled}
     courses=LearningItem.query.filter_by(category='courses',published=True).order_by(LearningItem.created_at.desc()).all()
+    my_course_items=[item for item in courses if item.id in enrolled_ids]
+    best_score=max((round((a.score / a.total) * 100) for a in attempts if a.total), default=0)
+    test_catalog=[
+        ('mock-test','Mock Test','📝'),
+        ('bihar-police','Bihar Police Test Series','🛡️'),
+        ('bpsc','BPSC Test Series','🏛️'),
+        ('bssc','BSSC Test Series','👥'),
+        ('tre-teacher','TRE Teacher Test Series','👩‍🏫'),
+        ('stet-btet','STET/BTET Test Series','📘'),
+    ]
+    paid_course_catalog=[
+        ('BPSC Exam Preparation','BPSC परीक्षा की तैयारी',199,'🏛️'),
+        ('Bihar Police Constable','Constable Exam',199,'🛡️'),
+        ('BSSC Inter Level','Inter Level Exam',299,'👥'),
+        ('BPSC TRE-04 (Class 1 to 5)','Teacher Recruitment Exam',199,'👩‍🏫'),
+        ('CTET Class 1 to 5','Teacher Eligibility Test',199,'📚'),
+        ('STET / BTET','Teaching Eligibility Exam',199,'🎓'),
+        ('Computer Classes (MS Office / MS Excel)','Computer Training',299,'💻'),
+        ('Photoshop + CorelDRAW','Photo Editing & Graphic Design',199,'🎨'),
+        ('Full Excel Course','Complete Excel Training',299,'📊'),
+    ]
     billing = BillingSubscription.query.filter_by(user_id=session['user_id']).first()
     return render_template('student.html',subjects=subjects,attempts=attempts,courses=courses,
-                           enrolled_ids=enrolled_ids,billing=billing)
+                           enrolled_ids=enrolled_ids,my_course_items=my_course_items,
+                           enrolled_count=len(my_course_items),best_score=best_score,
+                           test_series_count=len(test_catalog),test_catalog=test_catalog,
+                           paid_course_catalog=paid_course_catalog,billing=billing)
+
+@app.route('/my-courses')
+@login_required('student')
+def my_courses():
+    enrolled_ids={e.item_id for e in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
+    items=LearningItem.query.filter(LearningItem.id.in_(enrolled_ids),LearningItem.category=='courses',LearningItem.published.is_(True)).order_by(LearningItem.created_at.desc()).all() if enrolled_ids else []
+    return render_template('my_courses.html',items=items)
+
+@app.route('/test-series')
+@login_required('student')
+def test_series_catalog():
+    test_catalog=[
+        ('mock-test','Mock Test','📝'),
+        ('bihar-police','Bihar Police Test Series','🛡️'),
+        ('bpsc','BPSC Test Series','🏛️'),
+        ('bssc','BSSC Test Series','👥'),
+        ('tre-teacher','TRE Teacher Test Series','👩‍🏫'),
+        ('stet-btet','STET/BTET Test Series','📘'),
+    ]
+    return render_template('test_series_catalog.html',test_catalog=test_catalog)
 
 @app.route('/learning')
 @login_required('student')
