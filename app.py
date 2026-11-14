@@ -1,4 +1,4 @@
-import os, csv, io, secrets, re, hmac, hashlib, json, urllib.request, urllib.error
+import os, csv, io, secrets, re, hmac, hashlib, json, importlib, urllib.request, urllib.error
 from datetime import datetime, timezone
 from functools import wraps
 from urllib.parse import urlparse
@@ -10,10 +10,14 @@ from werkzeug.utils import secure_filename
 from sqlalchemy import func, or_, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
+# Razorpay is loaded lazily as well as at startup. This gives Render a clear
+# diagnostic if the package exists in the build but cannot be imported at runtime.
+_RAZORPAY_IMPORT_ERROR = None
 try:
     import razorpay
-except ImportError:
+except Exception as exc:
     razorpay = None
+    _RAZORPAY_IMPORT_ERROR = f'{type(exc).__name__}: {exc}'
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
@@ -948,20 +952,37 @@ def bulk_template(fmt):
     abort(404)
 
 def one_time_razorpay_client():
-    """Build a Razorpay client for one-time Orders API payments (not Subscriptions)."""
-    if not razorpay:
-        raise RuntimeError('Razorpay Python SDK is not installed. Check requirements.txt and redeploy.')
+    """Create a Razorpay client for a single charge through Orders API."""
+    global razorpay, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, _RAZORPAY_IMPORT_ERROR
+
+    # Retry import at request time. This also exposes the real import failure
+    # in Render logs instead of reporting every import problem as 'not installed'.
+    if razorpay is None:
+        try:
+            razorpay = importlib.import_module('razorpay')
+            _RAZORPAY_IMPORT_ERROR = None
+        except Exception as exc:
+            _RAZORPAY_IMPORT_ERROR = f'{type(exc).__name__}: {exc}'
+            app.logger.exception('Razorpay SDK import failed at runtime')
+            raise RuntimeError(f'Razorpay SDK could not be imported: {_RAZORPAY_IMPORT_ERROR}') from exc
+
+    # Read current Render environment values at request time, not only at module
+    # startup. Never log or return the secret itself.
+    RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '').strip()
+    RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '').strip()
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
         app.logger.error(
-            'Razorpay one-time config missing: sdk=%s key_id_present=%s key_secret_present=%s',
+            'Razorpay one-time keys missing: sdk_imported=%s key_id_present=%s key_secret_present=%s',
             bool(razorpay), bool(RAZORPAY_KEY_ID), bool(RAZORPAY_KEY_SECRET)
         )
-        raise RuntimeError('Razorpay Key ID or Key Secret is missing in the server environment.')
-    # A Test Key ID must be paired with its Test Secret, and likewise for Live.
+        raise RuntimeError('Render में RAZORPAY_KEY_ID या RAZORPAY_KEY_SECRET मौजूद नहीं है।')
+
+    # Test Key ID must be paired with Test Secret; Live with Live.
     if RAZORPAY_KEY_ID.startswith('rzp_test_') and RAZORPAY_KEY_SECRET.startswith('rzp_live_'):
-        raise RuntimeError('Razorpay Test Key ID and Live Key Secret do not match.')
+        raise RuntimeError('Razorpay Test Key ID और Live Key Secret आपस में मेल नहीं खाते।')
     if RAZORPAY_KEY_ID.startswith('rzp_live_') and RAZORPAY_KEY_SECRET.startswith('rzp_test_'):
-        raise RuntimeError('Razorpay Live Key ID and Test Key Secret do not match.')
+        raise RuntimeError('Razorpay Live Key ID और Test Key Secret आपस में मेल नहीं खाते।')
+
     return razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 
@@ -1115,10 +1136,11 @@ def purchase_verify():
     if purchase.status == 'paid':
         return jsonify(ok=True, paid=True, redirect=((url_for('learning_item', item_id=int(purchase.product_key)) if purchase.product_key.isdigit() else url_for('learning_exam', slug=purchase.product_key)) if purchase.product_type == 'course' else url_for('exam_test_series', slug=purchase.product_key)))
     try:
+        # Refresh the current Render credentials before signature verification.
+        client = one_time_razorpay_client()
         expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), f'{order_id}|{payment_id}'.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, signature):
             return jsonify(ok=False, message='भुगतान हस्ताक्षर सत्यापित नहीं हुआ।'), 400
-        client = one_time_razorpay_client()
         remote_order = client.order.fetch(order_id)
         payment = client.payment.fetch(payment_id)
         if str(remote_order.get('id')) != order_id or remote_order.get('currency') != 'INR' or int(remote_order.get('amount', -1)) != purchase.amount_paise:
