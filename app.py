@@ -133,6 +133,7 @@ class Question(db.Model):
     question=db.Column(db.Text,nullable=False); a=db.Column(db.Text,nullable=False); b=db.Column(db.Text,nullable=False)
     c=db.Column(db.Text,nullable=False); d=db.Column(db.Text,nullable=False); answer=db.Column(db.String(1),nullable=False)
     explanation=db.Column(db.Text,default=''); exam_slug=db.Column(db.String(40),default='',index=True); published=db.Column(db.Boolean,default=False,index=True)
+    set_no=db.Column(db.Integer,nullable=False,default=1,index=True)
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
 class Attempt(db.Model):
     id=db.Column(db.Integer,primary_key=True); user_id=db.Column(db.Integer,db.ForeignKey('user.id'),nullable=False,index=True)
@@ -176,6 +177,8 @@ class LearningItem(db.Model):
     external_url=db.Column(db.String(1000),default='')
     schedule_text=db.Column(db.String(255),default='')
     content_date=db.Column(db.String(10),default='')
+    exam_slug=db.Column(db.String(40),default='',index=True)
+    folder_key=db.Column(db.String(30),default='updates',index=True)
     price=db.Column(db.String(50),default='Free')
     published=db.Column(db.Boolean,default=True,index=True)
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
@@ -240,11 +243,20 @@ with app.app_context():
     if 'content_date' not in learning_columns:
         with db.engine.begin() as conn:
             conn.execute(text("ALTER TABLE learning_item ADD COLUMN content_date VARCHAR(10) DEFAULT ''"))
+    if 'exam_slug' not in learning_columns:
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE learning_item ADD COLUMN exam_slug VARCHAR(40) DEFAULT ''"))
+    if 'folder_key' not in learning_columns:
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE learning_item ADD COLUMN folder_key VARCHAR(30) DEFAULT 'updates'"))
     # Safe additive migration: attach optional competitive-exam category to questions.
     question_columns={col['name'] for col in inspect(db.engine).get_columns('question')}
     if 'exam_slug' not in question_columns:
         with db.engine.begin() as conn:
             conn.execute(text("ALTER TABLE question ADD COLUMN exam_slug VARCHAR(40) DEFAULT ''"))
+    if 'set_no' not in question_columns:
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE question ADD COLUMN set_no INTEGER NOT NULL DEFAULT 1"))
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
     admin_password=os.environ.get('ADMIN_PASSWORD','')
     admin_user = User.query.filter_by(email=admin_email).first()
@@ -477,6 +489,16 @@ def register():
             }
             return render_template('register.html', otp_config=msg91_template_config(), otp_pending=True)
     return render_template('register.html', otp_config=msg91_template_config(), otp_pending=False)
+
+
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
 
 
 @app.route('/terms')
@@ -821,7 +843,7 @@ def new_question():
     if request.method=='POST':
         if not valid_question_form(request.form): flash('प्रश्न, चारों विकल्प, सही उत्तर, कक्षा और विषय सही भरें।','error')
         else:
-            q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),exam_slug=request.form.get('exam_slug','').strip(),published=request.form.get('published')=='on')
+            q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),exam_slug=request.form.get('exam_slug','').strip(),set_no=max(1,min(20,request.form.get('set_no',1,type=int))),published=request.form.get('published')=='on')
             db.session.add(q)
             if q.published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नया प्रश्न जोड़ा गया।',url_for('practice',cn=q.class_no,subject=q.subject))
             db.session.commit(); flash('प्रश्न सेव हो गया।','success'); return redirect(url_for('admin'))
@@ -836,7 +858,7 @@ def edit_question(qid):
         else:
             was_published=q.published
             for key in ('subject','chapter','question','a','b','c','d','explanation'): setattr(q,key,request.form.get(key,'').strip())
-            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.exam_slug=request.form.get('exam_slug','').strip(); q.published=request.form.get('published')=='on'
+            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.exam_slug=request.form.get('exam_slug','').strip(); q.set_no=max(1,min(20,request.form.get('set_no',q.set_no or 1,type=int))); q.published=request.form.get('published')=='on'
             if q.published and not was_published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नए प्रश्न प्रकाशित हुए।',url_for('practice',cn=q.class_no,subject=q.subject))
             db.session.commit()
             flash('प्रश्न अपडेट हो गया।','success'); return redirect(url_for('admin'))
@@ -871,7 +893,7 @@ def delete_question(qid):
     q=Question.query.get_or_404(qid); db.session.delete(q); db.session.commit(); flash('प्रश्न हटाया गया।','success'); return redirect(request.referrer or url_for('admin'))
 
 def normalize_import_row(row):
-    aliases = {'id':['id','question_id'],'class_no':['class_no','class'],'subject':['subject'],'chapter':['chapter'],'question':['question'],'a':['a','option_a'],'b':['b','option_b'],'c':['c','option_c'],'d':['d','option_d'],'answer':['answer','correct_answer'],'explanation':['explanation'],'exam_slug':['exam_slug','exam']}
+    aliases = {'id':['id','question_id'],'class_no':['class_no','class'],'subject':['subject'],'chapter':['chapter'],'question':['question'],'a':['a','option_a'],'b':['b','option_b'],'c':['c','option_c'],'d':['d','option_d'],'answer':['answer','correct_answer'],'explanation':['explanation'],'exam_slug':['exam_slug','exam'],'set_no':['set_no','set','set_number']}
     lowered={str(k).strip().lower():('' if v is None else str(v).strip()) for k,v in (row or {}).items() if k is not None}
     return {key: next((lowered[n] for n in names if n in lowered), '') for key,names in aliases.items()}
 
@@ -908,6 +930,7 @@ def read_bulk_rows(file_storage):
 @login_required('admin')
 def import_csv():
     target_exam_slug = request.args.get('exam_slug', request.form.get('target_exam_slug', '')).strip()
+    target_set_no = max(1, min(20, request.args.get('set_no', request.form.get('set_no', 1, type=int), type=int)))
     if target_exam_slug and target_exam_slug not in EXAM_CATEGORIES:
         abort(404)
     if request.method=='POST':
@@ -918,7 +941,7 @@ def import_csv():
             for r in rows:
                 cn=str(r.get('class_no','')).strip(); ans=str(r.get('answer','')).strip().upper(); sub=str(r.get('subject','')).strip()
                 if cn not in [str(x) for x in CLASSES] or sub not in SUBJECTS or ans not in ['A','B','C','D'] or not all(str(r.get(k,'')).strip() for k in ['question','a','b','c','d']): skipped+=1; continue
-                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=target_exam_slug or (str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else ''))
+                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=target_exam_slug or (str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else ''),set_no=max(1,min(20,int(r.get('set_no') or request.form.get('set_no') or 1))))
                 raw_id=str(r.get('id','')).strip()
                 if raw_id:
                     if not raw_id.isdigit(): skipped+=1; continue
@@ -933,13 +956,13 @@ def import_csv():
             db.session.commit(); flash(f'इम्पोर्ट पूरा: {added} नए प्रश्न, {updated} अपडेट, {skipped} छोड़ी गई पंक्तियाँ। नए प्रश्न {"Published" if publish_new else "Draft"} में सेव हुए।','success')
         except Exception as e: db.session.rollback(); flash('फाइल पढ़ने में समस्या: '+str(e),'error')
         return redirect(url_for('question_bank', exam_slug=target_exam_slug) if target_exam_slug else url_for('question_bank'))
-    return render_template('import.html', target_exam_slug=target_exam_slug, target_exam_title=EXAM_CATEGORIES.get(target_exam_slug, ''))
+    return render_template('import.html', target_exam_slug=target_exam_slug, target_exam_title=EXAM_CATEGORIES.get(target_exam_slug, ''), target_set_no=target_set_no)
 
 @app.route('/admin/template/<fmt>')
 @login_required('admin')
 def bulk_template(fmt):
-    headers=['id','class_no','subject','chapter','question','a','b','c','d','answer','explanation','exam_slug']
-    sample=['','7','General Knowledge','सामान्य ज्ञान','भारत की राजधानी क्या है?','पटना','नई दिल्ली','मुंबई','कोलकाता','B','भारत की राजधानी नई दिल्ली है।','']
+    headers=['id','class_no','subject','chapter','question','a','b','c','d','answer','explanation','exam_slug','set_no']
+    sample=['','7','General Knowledge','सामान्य ज्ञान','भारत की राजधानी क्या है?','पटना','नई दिल्ली','मुंबई','कोलकाता','B','भारत की राजधानी नई दिल्ली है।','','1']
     if fmt=='xlsx':
         from openpyxl import Workbook
         wb=Workbook(); ws=wb.active; ws.title='Questions'; ws.append(headers); ws.append(sample); bio=io.BytesIO(); wb.save(bio); bio.seek(0)
@@ -1259,24 +1282,18 @@ def learning_hub():
 @app.route('/learning/exam/<slug>')
 @login_required('student')
 def learning_exam(slug):
-    if slug not in EXAM_CATEGORIES:
-        abort(404)
-    title = EXAM_CATEGORIES[slug]
-    # Existing notes/PDF/course content plus exam-specific published MCQs.
-    query = LearningItem.query.filter(LearningItem.published.is_(True)).filter(
-        or_(func.lower(LearningItem.title).like(f'%{title.lower()}%'),
-            func.lower(LearningItem.description).like(f'%{title.lower()}%'),
-            func.lower(LearningItem.subject).like(f'%{title.lower()}%')))
-    items = query.order_by(LearningItem.created_at.desc()).all()
-    has_access = session.get('role') == 'admin' or has_purchase(session['user_id'], 'course', slug) or has_purchase(session['user_id'], 'test', slug)
-    questions = Question.query.filter_by(exam_slug=slug, published=True).all() if has_access else []
-    groups = db.session.query(Question.class_no, Question.subject, func.count(Question.id)).filter_by(
-        exam_slug=slug, published=True).group_by(Question.class_no, Question.subject).order_by(
-        Question.class_no, Question.subject).all()
-    enrolled_ids = {x.item_id for x in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
-    return render_template('learning_exam.html', category_title=title, exam_slug=slug,
-                           items=items, questions=questions, question_groups=groups,
-                           enrolled_ids=enrolled_ids, purchased=has_access)
+    if slug not in EXAM_CATEGORIES: abort(404)
+    title=EXAM_CATEGORIES[slug]
+    has_access=session.get('role')=='admin' or has_purchase(session['user_id'],'course',slug) or has_purchase(session['user_id'],'test',slug)
+    items=LearningItem.query.filter_by(published=True,exam_slug=slug).order_by(LearningItem.created_at.desc()).all()
+    if not items:
+        items=LearningItem.query.filter(LearningItem.published.is_(True)).filter(or_(func.lower(LearningItem.title).like(f'%{title.lower()}%'),func.lower(LearningItem.description).like(f'%{title.lower()}%'),func.lower(LearningItem.subject).like(f'%{title.lower()}%'))).order_by(LearningItem.created_at.desc()).all()
+    folder_labels={'question-bank':'Question Bank','pdf-notes':'PDF Notes & Books','video-classes':'Video Classes','updates':'Updates & Study Material'}
+    folder_items={key:[item for item in items if (item.folder_key or 'updates')==key] for key in folder_labels}
+    questions=Question.query.filter_by(exam_slug=slug,published=True).all() if has_access else []
+    groups=db.session.query(Question.class_no,Question.subject,func.count(Question.id)).filter_by(exam_slug=slug,published=True).group_by(Question.class_no,Question.subject).order_by(Question.class_no,Question.subject).all()
+    enrolled_ids={x.item_id for x in CourseEnrollment.query.filter_by(user_id=session['user_id']).all()}
+    return render_template('learning_exam.html',category_title=title,exam_slug=slug,items=items,folder_items=folder_items,folder_labels=folder_labels,questions=questions,question_groups=groups,enrolled_ids=enrolled_ids,purchased=has_access)
 
 @app.route('/learning/<category>')
 @login_required('student')
@@ -1334,87 +1351,54 @@ def learning_file(item_id):
 @app.route('/test-series/<slug>')
 @login_required('student')
 def exam_test_series(slug):
-    """Show 150-question capacity and subject-wise published question counts for each paid series."""
-    if slug not in EXAM_CATEGORIES:
-        abort(404)
-    purchased = session.get('role') == 'admin' or has_purchase(session['user_id'], 'test', slug)
-    # Exam-series questions are shared across school classes; show every
-    # subject actually present in this series instead of only SUBJECTS labels.
-    rows = db.session.query(Question.subject, func.count(Question.id)).filter_by(
-        published=True, exam_slug=slug
-    ).group_by(Question.subject).order_by(Question.subject).all()
+    if slug not in EXAM_CATEGORIES: abort(404)
+    purchased = session.get('role') == 'admin' or has_purchase(session['user_id'], 'test', slug) or has_purchase(session['user_id'], 'course', slug)
+    set_counts = {}
+    for n in range(1, 21):
+        set_counts[n] = Question.query.filter_by(published=True, exam_slug=slug, set_no=n).count()
+    total = sum(set_counts.values())
+    rows = db.session.query(Question.subject, func.count(Question.id)).filter_by(published=True, exam_slug=slug).group_by(Question.subject).order_by(Question.subject).all()
     subject_counts = {name: count for name, count in rows}
-    total = sum(subject_counts.values())
-    return render_template('exam_test_slots.html', slug=slug,
-        exam_title=EXAM_CATEGORIES[slug], subject_counts=subject_counts,
-        total=total, required=150, ready=(total >= 150), purchased=purchased)
+    return render_template('exam_test_slots.html', slug=slug, exam_title=EXAM_CATEGORIES[slug],
+        subject_counts=subject_counts, total=total, required=3000, ready=all(v >= 150 for v in set_counts.values()),
+        purchased=purchased, set_counts=set_counts)
 
-@app.route('/test-series/<slug>/start')
+@app.route('/test-series/<slug>/set/<int:set_no>/start')
 @login_required('student')
-def start_exam_test(slug):
-    """Start a dedicated 150-question test using only this exam series' questions."""
-    if slug not in EXAM_CATEGORIES or slug == 'mock-test':
-        abort(404)
-    if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', slug):
-        abort(403)
-    # STET/BTET is an exam-specific bank, not a single school-class test.
-    # Select from all published questions tagged to this exam series.
-    raw_class = str(session.get('class_no') or 5)
-    student_class = int(raw_class) if raw_class.isdigit() and int(raw_class) in range(1, 11) else 5
-    questions = Question.query.filter_by(
-        published=True, exam_slug=slug
-    ).order_by(func.random()).limit(150).all()
-    if len(questions) < 150:
-        flash(f'{EXAM_CATEGORIES[slug]} में कुल {len(questions)} प्रकाशित प्रश्न हैं। 150 प्रश्न पूरे होने पर टेस्ट शुरू होगा।', 'warning')
+def start_exam_set(slug, set_no):
+    if slug not in EXAM_CATEGORIES or not 1 <= set_no <= 20: abort(404)
+    if session.get('role') != 'admin' and not (has_purchase(session['user_id'], 'test', slug) or has_purchase(session['user_id'], 'course', slug)): abort(403)
+    questions = Question.query.filter_by(published=True, exam_slug=slug, set_no=set_no).order_by(func.random()).limit(150).all()
+    if len(questions) != 150:
+        flash(f'SET-{set_no:02d} में अभी {len(questions)} प्रकाशित प्रश्न हैं। टेस्ट शुरू करने के लिए 150 प्रश्न जरूरी हैं।', 'warning')
         return redirect(url_for('exam_test_series', slug=slug))
-    class_no = student_class
-    session['exam_attempt'] = {
-        'slug': slug,
-        'class_no': class_no,
-        'question_ids': [q.id for q in questions],
-        'started_at': datetime.utcnow().isoformat()
-    }
-    return render_template('mock_test.html', questions=questions, class_no=class_no,
-        available=150, required=150, subject_counts={}, shortage=False,
-        test_title=EXAM_CATEGORIES[slug], test_slug=slug,
-        submit_endpoint='submit_exam_test', timer_minutes=150)
+    raw_class = str(session.get('class_no') or 5)
+    class_no = int(raw_class) if raw_class.isdigit() and int(raw_class) in range(1,11) else 5
+    session['exam_attempt'] = {'slug':slug,'set_no':set_no,'class_no':class_no,'question_ids':[q.id for q in questions],'started_at':datetime.utcnow().isoformat()}
+    return render_template('mock_test.html', questions=questions, class_no=class_no, available=150, required=150,
+        subject_counts={}, shortage=False, test_title=f'{EXAM_CATEGORIES[slug]} • SET-{set_no:02d}', test_slug=slug,
+        submit_endpoint='submit_exam_set', timer_minutes=150, set_no=set_no)
 
-@app.route('/test-series/<slug>/submit', methods=['POST'])
+@app.route('/test-series/<slug>/set/<int:set_no>/submit', methods=['POST'])
 @login_required('student')
-def submit_exam_test(slug):
-    """Score the exact question set issued when this exam-series attempt began."""
-    attempt = session.get('exam_attempt') or {}
-    if slug not in EXAM_CATEGORIES or attempt.get('slug') != slug:
-        abort(400, description='टेस्ट सेशन समाप्त हो गया है। कृपया टेस्ट दोबारा शुरू करें।')
-    if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', slug):
-        abort(403)
-    ids = attempt.get('question_ids') or []
-    if len(ids) != 150:
-        abort(400, description='टेस्ट में 150 प्रश्नों का सही सेट नहीं मिला।')
-    questions = Question.query.filter(
-        Question.id.in_(ids), Question.published.is_(True),
-        Question.exam_slug == slug
-    ).all()
-    by_id = {q.id: q for q in questions}
-    if len(by_id) != 150:
-        abort(400, description='कुछ प्रश्न अब उपलब्ध नहीं हैं। कृपया नया टेस्ट शुरू करें।')
-    results, score = [], 0
-    subject_scores = {name: {'score': 0, 'total': 0} for name in SUBJECTS}
+def submit_exam_set(slug, set_no):
+    attempt=session.get('exam_attempt') or {}
+    if slug not in EXAM_CATEGORIES or attempt.get('slug') != slug or attempt.get('set_no') != set_no: abort(400, description='टेस्ट सेशन समाप्त हो गया है।')
+    if session.get('role') != 'admin' and not (has_purchase(session['user_id'], 'test', slug) or has_purchase(session['user_id'], 'course', slug)): abort(403)
+    ids=attempt.get('question_ids') or []
+    if len(ids) != 150: abort(400, description='इस सेट में 150 प्रश्न नहीं मिले।')
+    questions=Question.query.filter(Question.id.in_(ids),Question.published.is_(True),Question.exam_slug==slug,Question.set_no==set_no).all()
+    by_id={q.id:q for q in questions}
+    if len(by_id) != 150: abort(400, description='कुछ प्रश्न उपलब्ध नहीं हैं। टेस्ट दोबारा शुरू करें।')
+    results=[]; score=0; subject_scores={}
     for qid in ids:
-        q = by_id[qid]
-        selected = request.form.get('q' + str(qid), '')
-        correct = selected == q.answer
-        score += int(correct)
-        subject_scores.setdefault(q.subject, {'score': 0, 'total': 0})
-        subject_scores[q.subject]['total'] += 1
-        subject_scores[q.subject]['score'] += int(correct)
-        results.append((q, selected, correct))
-    db.session.add(Attempt(user_id=session['user_id'], class_no=attempt['class_no'],
-        subject=EXAM_CATEGORIES[slug], score=score, total=150))
-    db.session.commit()
-    session.pop('exam_attempt', None)
-    return render_template('mock_result.html', score=score, total=150, results=results,
-        subject_scores=subject_scores, class_no=attempt['class_no'], test_title=EXAM_CATEGORIES[slug])
+        q=by_id[qid]; selected=request.form.get('q'+str(qid),''); correct=selected==q.answer
+        score += int(correct); subject_scores.setdefault(q.subject,{'score':0,'total':0})
+        subject_scores[q.subject]['total'] += 1; subject_scores[q.subject]['score'] += int(correct)
+        results.append((q,selected,correct))
+    db.session.add(Attempt(user_id=session['user_id'],class_no=attempt['class_no'],subject=f'{EXAM_CATEGORIES[slug]} SET-{set_no:02d}',score=score,total=150))
+    db.session.commit(); session.pop('exam_attempt',None)
+    return render_template('mock_result.html',score=score,total=150,results=results,subject_scores=subject_scores,class_no=attempt['class_no'],test_title=f'{EXAM_CATEGORIES[slug]} • SET-{set_no:02d}')
 
 @app.route('/mock-test')
 @login_required('student')
@@ -1541,13 +1525,13 @@ def admin_content():
                 content_date=datetime(int(year),int(month),int(day)).strftime('%Y-%m-%d')
             except (TypeError,ValueError):
                 flash('Current Affairs के लिए सही Date, Month और Year चुनें।','error'); return redirect(url_for('admin_content'))
-        item=LearningItem(category=category,title=title,description=request.form.get('description','').strip(),class_no=class_no,subject=request.form.get('subject','').strip(),file_name=original,stored_name=stored,external_url=url,schedule_text=request.form.get('schedule_text','').strip(),content_date=content_date,price=request.form.get('price','Free').strip() or 'Free',published=request.form.get('published')=='on')
+        item=LearningItem(category=category,title=title,description=request.form.get('description','').strip(),class_no=class_no,subject=request.form.get('subject','').strip(),exam_slug=request.form.get('exam_slug','').strip() if request.form.get('exam_slug','').strip() in EXAM_CATEGORIES else '',folder_key=request.form.get('folder_key','updates') if request.form.get('folder_key','updates') in ('question-bank','pdf-notes','video-classes','updates') else 'updates',file_name=original,stored_name=stored,external_url=url,schedule_text=request.form.get('schedule_text','').strip(),content_date=content_date,price=request.form.get('price','Free').strip() or 'Free',published=request.form.get('published')=='on')
         db.session.add(item)
         db.session.flush()
         if item.published: create_site_notification(f'नई सामग्री: {item.title}', f'{CONTENT_CATEGORIES.get(category, category)} में नई सामग्री उपलब्ध है', url_for('learning_item', item_id=item.id))
         db.session.commit(); flash('Learning content सेव हो गया।','success'); return redirect(url_for('admin_content'))
     items=LearningItem.query.order_by(LearningItem.created_at.desc()).limit(200).all()
-    return render_template('admin_content.html',items=items)
+    return render_template('admin_content.html',items=items,exam_categories=EXAM_CATEGORIES)
 
 @app.route('/admin/content/<int:item_id>/delete',methods=['POST'])
 @login_required('admin')

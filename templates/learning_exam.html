@@ -1,21 +1,7 @@
 {% extends 'base.html' %}{% block content %}
-<div class="page-title"><div><div class="eyebrow">BIHAR COMPETITIVE EXAMS</div><h1>{{ category_title }}</h1><p>{{ category_title }} के लिए प्रकाशित प्रश्न, नोट्स, PDF और टेस्ट।</p></div><a class="btn btn-outline" href="{{ url_for('home') }}">← वापस</a></div>
-<div class="hub-note">{{ category_title }} के प्रश्न और अध्ययन सामग्री नीचे उपलब्ध हैं।</div>
-
-{% if question_groups %}
-<section class="table-card" style="margin:20px 0"><h2>Objective Questions / ऑनलाइन अभ्यास</h2>
-<p class="muted">कक्षा और विषय चुनकर अभ्यास टेस्ट शुरू करें।</p>
-<div class="content-list">
-{% for class_no, subject, count in question_groups %}
-<article class="content-card"><div class="content-card-top"><span class="status live">{{ count }} प्रश्न</span><span class="muted">कक्षा {{ class_no }}</span></div>
-<h3>{{ subject }}</h3><p>{{ category_title }} के {{ subject }} प्रश्नों का अभ्यास करें।</p>
-<a class="btn" href="{{ url_for('practice',class_no=class_no,subject=subject,exam_slug=exam_slug) }}">टेस्ट शुरू करें</a></article>
-{% endfor %}
-</div></section>
-{% endif %}
-
-{% if items %}<h2>Notes, PDF और अन्य सामग्री</h2><div class="content-list">
-{% for item in items %}<article class="content-card"><div class="content-card-top"><span class="status live">{{ item.price or 'Free' }}</span>{% if item.class_no %}<span class="muted">कक्षा {{ item.class_no }}</span>{% endif %}</div><h3>{{ item.title }}</h3><p>{{ item.description or 'अधिक जानकारी के लिए खोलें।' }}</p>{% if item.subject %}<small>विषय: {{ item.subject }}</small>{% endif %}{% if item.schedule_text %}<small class="schedule">{{ item.schedule_text }}</small>{% endif %}<div class="content-actions"><a class="btn btn-outline" href="{{ url_for('learning_item',item_id=item.id) }}">विवरण देखें</a></div></article>{% endfor %}
-</div>{% endif %}
-{% if not items and not question_groups %}<div class="table-card empty">इस परीक्षा की सामग्री अभी उपलब्ध नहीं है। Admin में नया प्रश्न जोड़ते समय परीक्षा चुनें या Content Manager में परीक्षा के नाम से सामग्री Publish करें।</div>{% endif %}
-{% endblock %}
+<div class="page-title"><div><div class="eyebrow">AVI CLASSES • PAID COURSE</div><h1>{{category_title}}</h1><p>आपके कोर्स की सभी पढ़ाई की सामग्री एक ही जगह।</p></div><a class="btn btn-outline" href="{{url_for('home')}}">← वापस</a></div>
+{% if not purchased %}<section class="table-card"><h2>🔒 Course Locked</h2><p>सभी टेस्ट सेट, PDF और वीडियो देखने के लिए कोर्स खरीदें।</p><a class="btn btn-large" href="{{url_for('checkout_page',kind='course',key=exam_slug)}}">Buy Course</a></section>{% else %}
+<section class="table-card"><h2>📝 Online Test Series</h2><p>SET-01 से SET-20 • हर सेट में 150 प्रश्न • 150 मिनट</p><a class="btn btn-large" href="{{url_for('exam_test_series',slug=exam_slug)}}">20 Test Sets खोलें →</a></section>
+<div class="content-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:20px 0">{% for key,label in folder_labels.items() %}<a class="content-card" href="#folder-{{key}}"><h2>{{'📚' if key=='question-bank' else ('📄' if key=='pdf-notes' else ('🎥' if key=='video-classes' else '📰'))}} {{label}}</h2><p>{{folder_items[key]|length}} सामग्री उपलब्ध</p></a>{% endfor %}</div>
+{% for key,label in folder_labels.items() %}<section class="table-card" id="folder-{{key}}" style="margin:18px 0"><h2>{{label}}</h2>{% if folder_items[key] %}<div class="content-list">{% for item in folder_items[key] %}<article class="content-card"><h3>{{item.title}}</h3><p>{{item.description or 'अध्ययन सामग्री'}}</p>{% if item.external_url %}<a class="btn btn-outline" href="{{item.external_url}}" target="_blank" rel="noopener">Open Link</a>{% endif %}<a class="btn" href="{{url_for('learning_item',item_id=item.id)}}">देखें / खोलें →</a></article>{% endfor %}</div>{% else %}<p class="muted">इस फोल्डर में सामग्री अभी अपलोड नहीं हुई है।</p>{% endif %}</section>{% endfor %}
+{% endif %}{% endblock %}
