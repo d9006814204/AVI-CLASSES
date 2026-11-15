@@ -825,7 +825,7 @@ def new_question():
     if request.method=='POST':
         if not valid_question_form(request.form): flash('प्रश्न, चारों विकल्प, सही उत्तर, कक्षा और विषय सही भरें।','error')
         else:
-            q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),exam_slug=request.form.get('exam_slug','').strip(),set_no=max(1,min(20,request.form.get('set_no',1,type=int))),published=request.form.get('published')=='on')
+            q=Question(class_no=int(request.form['class_no']),subject=request.form['subject'],chapter=request.form.get('chapter','').strip(),question=request.form['question'].strip(),a=request.form['a'].strip(),b=request.form['b'].strip(),c=request.form['c'].strip(),d=request.form['d'].strip(),answer=request.form['answer'].upper(),explanation=request.form.get('explanation','').strip(),exam_slug=request.form.get('exam_slug','').strip(),set_no=max(1,min(5,request.form.get('set_no',1,type=int))),published=request.form.get('published')=='on')
             db.session.add(q)
             if q.published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नया प्रश्न जोड़ा गया।',url_for('practice',cn=q.class_no,subject=q.subject))
             db.session.commit(); flash('प्रश्न सेव हो गया।','success'); return redirect(url_for('admin'))
@@ -840,7 +840,7 @@ def edit_question(qid):
         else:
             was_published=q.published
             for key in ('subject','chapter','question','a','b','c','d','explanation'): setattr(q,key,request.form.get(key,'').strip())
-            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.exam_slug=request.form.get('exam_slug','').strip(); q.set_no=max(1,min(20,request.form.get('set_no',q.set_no or 1,type=int))); q.published=request.form.get('published')=='on'
+            q.class_no=int(request.form['class_no']); q.answer=request.form['answer'].upper(); q.exam_slug=request.form.get('exam_slug','').strip(); q.set_no=max(1,min(5,request.form.get('set_no',q.set_no or 1,type=int))); q.published=request.form.get('published')=='on'
             if q.published and not was_published: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{q.class_no}वीं कक्षा • {q.subject} में नए प्रश्न प्रकाशित हुए।',url_for('practice',cn=q.class_no,subject=q.subject))
             db.session.commit()
             flash('प्रश्न अपडेट हो गया।','success'); return redirect(url_for('admin'))
@@ -912,7 +912,7 @@ def read_bulk_rows(file_storage):
 @login_required('admin')
 def import_csv():
     target_exam_slug = request.args.get('exam_slug', request.form.get('target_exam_slug', '')).strip()
-    target_set_no = max(1, min(20, request.args.get('set_no', request.form.get('set_no', 1, type=int), type=int)))
+    target_set_no = max(1, min(5, request.args.get('set_no', request.form.get('set_no', 1, type=int), type=int)))
     if target_exam_slug and target_exam_slug not in EXAM_CATEGORIES:
         abort(404)
     if request.method=='POST':
@@ -923,7 +923,7 @@ def import_csv():
             for r in rows:
                 cn=str(r.get('class_no','')).strip(); ans=str(r.get('answer','')).strip().upper(); sub=str(r.get('subject','')).strip()
                 if cn not in [str(x) for x in CLASSES] or sub not in SUBJECTS or ans not in ['A','B','C','D'] or not all(str(r.get(k,'')).strip() for k in ['question','a','b','c','d']): skipped+=1; continue
-                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=target_exam_slug or (str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else ''),set_no=max(1,min(20,int(r.get('set_no') or request.form.get('set_no') or 1))))
+                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=target_exam_slug or (str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else ''),set_no=max(1,min(5,int(r.get('set_no') or request.form.get('set_no') or 1))))
                 raw_id=str(r.get('id','')).strip()
                 if raw_id:
                     if not raw_id.isdigit(): skipped+=1; continue
@@ -1346,19 +1346,19 @@ def exam_test_series(slug):
     if slug not in EXAM_CATEGORIES: abort(404)
     purchased = session.get('role') == 'admin' or has_purchase(session['user_id'], 'test', slug) or has_purchase(session['user_id'], 'course', slug)
     set_counts = {}
-    for n in range(1, 21):
+    for n in range(1, 6):
         set_counts[n] = Question.query.filter_by(published=True, exam_slug=slug, set_no=n).count()
     total = sum(set_counts.values())
     rows = db.session.query(Question.subject, func.count(Question.id)).filter_by(published=True, exam_slug=slug).group_by(Question.subject).order_by(Question.subject).all()
     subject_counts = {name: count for name, count in rows}
     return render_template('exam_test_slots.html', slug=slug, exam_title=EXAM_CATEGORIES[slug],
-        subject_counts=subject_counts, total=total, required=3000, ready=all(v >= 150 for v in set_counts.values()),
+        subject_counts=subject_counts, total=total, required=750, ready=all(v >= 150 for v in set_counts.values()),
         purchased=purchased, set_counts=set_counts)
 
 @app.route('/test-series/<slug>/set/<int:set_no>/start')
 @login_required('student')
 def start_exam_set(slug, set_no):
-    if slug not in EXAM_CATEGORIES or not 1 <= set_no <= 20: abort(404)
+    if slug not in EXAM_CATEGORIES or not 1 <= set_no <= 5: abort(404)
     if session.get('role') != 'admin' and not (has_purchase(session['user_id'], 'test', slug) or has_purchase(session['user_id'], 'course', slug)): abort(403)
     questions = Question.query.filter_by(published=True, exam_slug=slug, set_no=set_no).order_by(func.random()).limit(150).all()
     if len(questions) != 150:

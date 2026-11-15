@@ -1,10 +1,10 @@
-AVI CLASSES – Latest Project + 20 Test Sets Update
+AVI CLASSES – Latest Project + 5 Test Sets Update
 
 इस ZIP में नवीनतम अपलोड किए गए प्रोजेक्ट के Registration / Terms / Privacy बदलावों को सुरक्षित रखते हुए
-20 Test Sets और चार Study Material folders वाला सिस्टम जोड़ा गया है।
+5 Test Sets और चार Study Material folders वाला सिस्टम जोड़ा गया है।
 
 मुख्य सुविधाएँ:
-- प्रत्येक Test Series में SET-01 से SET-20
+- प्रत्येक Test Series में SET-01 से SET-05
 - प्रत्येक सेट में 150 प्रकाशित प्रश्न पूरे होने पर ही टेस्ट शुरू
 - प्रत्येक सेट का 150 मिनट का countdown और auto-submit
 - सेट के अनुसार अलग प्रश्न-अपलोड (CSV/XLSX/DOCX/PDF import workflow)
