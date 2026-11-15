@@ -244,8 +244,8 @@ with app.app_context():
     # Safe additive registration profile fields; existing accounts remain unchanged.
     user_columns={col['name'] for col in inspect(db.engine).get_columns('user')}
     with db.engine.begin() as conn:
-        if 'state' not in user_columns: conn.execute(text("ALTER TABLE user ADD COLUMN state VARCHAR(80)"))
-        if 'city' not in user_columns: conn.execute(text("ALTER TABLE user ADD COLUMN city VARCHAR(100)"))
+        if 'state' not in user_columns: conn.execute(text('ALTER TABLE "user" ADD COLUMN state VARCHAR(80)'))
+        if 'city' not in user_columns: conn.execute(text('ALTER TABLE "user" ADD COLUMN city VARCHAR(100)'))
     pending_columns={col['name'] for col in inspect(db.engine).get_columns('pending_registration')}
     with db.engine.begin() as conn:
         if 'state' not in pending_columns: conn.execute(text("ALTER TABLE pending_registration ADD COLUMN state VARCHAR(80)"))
