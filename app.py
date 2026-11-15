@@ -1337,6 +1337,72 @@ def exam_test_series(slug):
         exam_title=EXAM_CATEGORIES[slug], subject_counts=subject_counts,
         total=total, required=150, ready=(total >= 150), purchased=purchased)
 
+@app.route('/test-series/<slug>/start')
+@login_required('student')
+def start_exam_test(slug):
+    """Start a dedicated 150-question test using only this exam series' questions."""
+    if slug not in EXAM_CATEGORIES or slug == 'mock-test':
+        abort(404)
+    if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', slug):
+        abort(403)
+    raw_class = str(session.get('class_no') or 5)
+    if not raw_class.isdigit() or int(raw_class) not in range(1, 11):
+        abort(400, description='कृपया अपने खाते में सही कक्षा चुनें।')
+    class_no = int(raw_class)
+    questions = Question.query.filter_by(
+        published=True, exam_slug=slug, class_no=class_no
+    ).order_by(func.random()).limit(150).all()
+    if len(questions) < 150:
+        flash(f'{EXAM_CATEGORIES[slug]} में कक्षा {class_no} के केवल {len(questions)} प्रकाशित प्रश्न हैं। 150 प्रश्न पूरे होने पर टेस्ट शुरू होगा।', 'warning')
+        return redirect(url_for('exam_test_series', slug=slug))
+    session['exam_attempt'] = {
+        'slug': slug,
+        'class_no': class_no,
+        'question_ids': [q.id for q in questions],
+        'started_at': datetime.utcnow().isoformat()
+    }
+    return render_template('mock_test.html', questions=questions, class_no=class_no,
+        available=150, required=150, subject_counts={}, shortage=False,
+        test_title=EXAM_CATEGORIES[slug], test_slug=slug,
+        submit_endpoint='submit_exam_test', timer_minutes=150)
+
+@app.route('/test-series/<slug>/submit', methods=['POST'])
+@login_required('student')
+def submit_exam_test(slug):
+    """Score the exact question set issued when this exam-series attempt began."""
+    attempt = session.get('exam_attempt') or {}
+    if slug not in EXAM_CATEGORIES or attempt.get('slug') != slug:
+        abort(400, description='टेस्ट सेशन समाप्त हो गया है। कृपया टेस्ट दोबारा शुरू करें।')
+    if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', slug):
+        abort(403)
+    ids = attempt.get('question_ids') or []
+    if len(ids) != 150:
+        abort(400, description='टेस्ट में 150 प्रश्नों का सही सेट नहीं मिला।')
+    questions = Question.query.filter(
+        Question.id.in_(ids), Question.published.is_(True),
+        Question.exam_slug == slug, Question.class_no == attempt.get('class_no')
+    ).all()
+    by_id = {q.id: q for q in questions}
+    if len(by_id) != 150:
+        abort(400, description='कुछ प्रश्न अब उपलब्ध नहीं हैं। कृपया नया टेस्ट शुरू करें।')
+    results, score = [], 0
+    subject_scores = {name: {'score': 0, 'total': 0} for name in SUBJECTS}
+    for qid in ids:
+        q = by_id[qid]
+        selected = request.form.get('q' + str(qid), '')
+        correct = selected == q.answer
+        score += int(correct)
+        subject_scores.setdefault(q.subject, {'score': 0, 'total': 0})
+        subject_scores[q.subject]['total'] += 1
+        subject_scores[q.subject]['score'] += int(correct)
+        results.append((q, selected, correct))
+    db.session.add(Attempt(user_id=session['user_id'], class_no=attempt['class_no'],
+        subject=EXAM_CATEGORIES[slug], score=score, total=150))
+    db.session.commit()
+    session.pop('exam_attempt', None)
+    return render_template('mock_result.html', score=score, total=150, results=results,
+        subject_scores=subject_scores, class_no=attempt['class_no'], test_title=EXAM_CATEGORIES[slug])
+
 @app.route('/mock-test')
 @login_required('student')
 def combined_mock_test():
