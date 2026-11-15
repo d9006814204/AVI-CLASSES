@@ -896,15 +896,18 @@ def read_bulk_rows(file_storage):
 @app.route('/admin/import',methods=['GET','POST'])
 @login_required('admin')
 def import_csv():
+    target_exam_slug = request.args.get('exam_slug', request.form.get('target_exam_slug', '')).strip()
+    if target_exam_slug and target_exam_slug not in EXAM_CATEGORIES:
+        abort(404)
     if request.method=='POST':
         f=request.files.get('file')
-        if not f or not f.filename: flash('कृपया फाइल चुनें।','error'); return redirect(url_for('import_csv'))
+        if not f or not f.filename: flash('कृपया फाइल चुनें।','error'); return redirect(url_for('import_csv', exam_slug=target_exam_slug) if target_exam_slug else url_for('import_csv'))
         try:
             rows=read_bulk_rows(f); added=updated=skipped=0; publish_new=request.form.get('publish_new')=='on'
             for r in rows:
                 cn=str(r.get('class_no','')).strip(); ans=str(r.get('answer','')).strip().upper(); sub=str(r.get('subject','')).strip()
                 if cn not in [str(x) for x in CLASSES] or sub not in SUBJECTS or ans not in ['A','B','C','D'] or not all(str(r.get(k,'')).strip() for k in ['question','a','b','c','d']): skipped+=1; continue
-                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else '')
+                data=dict(class_no=int(cn),subject=sub,chapter=str(r.get('chapter',''))[:160],question=r['question'].strip(),a=r['a'].strip(),b=r['b'].strip(),c=r['c'].strip(),d=r['d'].strip(),answer=ans,explanation=str(r.get('explanation','')).strip(),exam_slug=target_exam_slug or (str(r.get('exam_slug','')).strip() if str(r.get('exam_slug','')).strip() in EXAM_CATEGORIES else ''))
                 raw_id=str(r.get('id','')).strip()
                 if raw_id:
                     if not raw_id.isdigit(): skipped+=1; continue
@@ -918,8 +921,8 @@ def import_csv():
             if added and publish_new: create_site_notification('नए Objective Questions उपलब्ध हैं',f'{added} नए प्रश्न Question Bank में प्रकाशित हुए हैं।',url_for('student'))
             db.session.commit(); flash(f'इम्पोर्ट पूरा: {added} नए प्रश्न, {updated} अपडेट, {skipped} छोड़ी गई पंक्तियाँ। नए प्रश्न {"Published" if publish_new else "Draft"} में सेव हुए।','success')
         except Exception as e: db.session.rollback(); flash('फाइल पढ़ने में समस्या: '+str(e),'error')
-        return redirect(url_for('question_bank'))
-    return render_template('import.html')
+        return redirect(url_for('question_bank', exam_slug=target_exam_slug) if target_exam_slug else url_for('question_bank'))
+    return render_template('import.html', target_exam_slug=target_exam_slug, target_exam_title=EXAM_CATEGORIES.get(target_exam_slug, ''))
 
 @app.route('/admin/template/<fmt>')
 @login_required('admin')
