@@ -1327,11 +1327,12 @@ def exam_test_series(slug):
     if slug not in EXAM_CATEGORIES:
         abort(404)
     purchased = session.get('role') == 'admin' or has_purchase(session['user_id'], 'test', slug)
-    subject_counts = {}
-    for subject_name in SUBJECTS:
-        subject_counts[subject_name] = Question.query.filter_by(
-            published=True, subject=subject_name, exam_slug=slug
-        ).count()
+    # Exam-series questions are shared across school classes; show every
+    # subject actually present in this series instead of only SUBJECTS labels.
+    rows = db.session.query(Question.subject, func.count(Question.id)).filter_by(
+        published=True, exam_slug=slug
+    ).group_by(Question.subject).order_by(Question.subject).all()
+    subject_counts = {name: count for name, count in rows}
     total = sum(subject_counts.values())
     return render_template('exam_test_slots.html', slug=slug,
         exam_title=EXAM_CATEGORIES[slug], subject_counts=subject_counts,
@@ -1345,16 +1346,17 @@ def start_exam_test(slug):
         abort(404)
     if session.get('role') != 'admin' and not has_purchase(session['user_id'], 'test', slug):
         abort(403)
+    # STET/BTET is an exam-specific bank, not a single school-class test.
+    # Select from all published questions tagged to this exam series.
     raw_class = str(session.get('class_no') or 5)
-    if not raw_class.isdigit() or int(raw_class) not in range(1, 11):
-        abort(400, description='कृपया अपने खाते में सही कक्षा चुनें।')
-    class_no = int(raw_class)
+    student_class = int(raw_class) if raw_class.isdigit() and int(raw_class) in range(1, 11) else 5
     questions = Question.query.filter_by(
-        published=True, exam_slug=slug, class_no=class_no
+        published=True, exam_slug=slug
     ).order_by(func.random()).limit(150).all()
     if len(questions) < 150:
-        flash(f'{EXAM_CATEGORIES[slug]} में कक्षा {class_no} के केवल {len(questions)} प्रकाशित प्रश्न हैं। 150 प्रश्न पूरे होने पर टेस्ट शुरू होगा।', 'warning')
+        flash(f'{EXAM_CATEGORIES[slug]} में कुल {len(questions)} प्रकाशित प्रश्न हैं। 150 प्रश्न पूरे होने पर टेस्ट शुरू होगा।', 'warning')
         return redirect(url_for('exam_test_series', slug=slug))
+    class_no = student_class
     session['exam_attempt'] = {
         'slug': slug,
         'class_no': class_no,
@@ -1380,7 +1382,7 @@ def submit_exam_test(slug):
         abort(400, description='टेस्ट में 150 प्रश्नों का सही सेट नहीं मिला।')
     questions = Question.query.filter(
         Question.id.in_(ids), Question.published.is_(True),
-        Question.exam_slug == slug, Question.class_no == attempt.get('class_no')
+        Question.exam_slug == slug
     ).all()
     by_id = {q.id: q for q in questions}
     if len(by_id) != 150:
