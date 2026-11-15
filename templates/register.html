@@ -1,37 +1,68 @@
 {% extends 'base.html' %}{% block content %}
-<div class="narrow"><form class="form-card" id="registerForm" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-<div class="eyebrow">JOIN THE CLASSROOM</div><h2>विद्यार्थी रजिस्ट्रेशन</h2>
-{% if not otp_pending %}
-<label>पूरा नाम</label><input name="name" required>
-<label>Email</label><input name="email" type="email" required>
-<label>मोबाइल नंबर</label><input name="phone" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" required placeholder="10 अंकों का मोबाइल नंबर">
-<label>Password (कम से कम 8 अक्षर)</label><input name="password" type="password" minlength="8" required>
-<label>कक्षा चुनें</label><select name="class_no" required><option value="">कक्षा चुनें</option>{% for c in classes %}<option value="{{ c }}">कक्षा {{ c }}</option>{% endfor %}</select>
-<button class="btn full">OTP के लिए आगे बढ़ें</button>
-{% else %}
-<h3>मोबाइल OTP सत्यापन</h3><p>आपके दिए मोबाइल नंबर पर OTP भेजें।</p>
-<label>मोबाइल नंबर</label><input id="otpPhone" type="tel" inputmode="numeric" maxlength="10" value="{{ session.get('otp_pending', {}).get('phone','')[2:] }}" readonly>
-<button class="btn full" type="button" id="sendOtp">OTP भेजें</button>
-<div id="otpArea" hidden><label>OTP</label><input id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="OTP दर्ज करें"><button class="btn full" type="button" id="verifyOtp">OTP Verify करके अकाउंट बनाएँ</button><button class="btn full" type="button" id="retryOtp">OTP दोबारा भेजें</button></div>
-<div id="msg91-captcha"></div><p id="otpMessage" role="status"></p>
-{% endif %}
-<p class="form-foot">पहले से अकाउंट है? <a href="{{ url_for('login') }}">लॉगिन करें</a></p></form></div>
+<style>
+.avi-register-wrap{max-width:760px;margin:28px auto;padding:30px 34px;background:#fff;border:1px solid #e4e7ff;border-radius:22px;box-shadow:0 16px 45px rgba(48,35,120,.10)}
+.avi-brand{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:22px;text-align:left}
+.avi-brand img{width:68px;height:68px;object-fit:contain}
+.avi-brand strong{display:block;font-size:30px;line-height:1.1;color:#17216d;letter-spacing:.4px}
+.avi-brand span{display:block;margin-top:7px;color:#6b21a8;font-size:13px;font-weight:600}
+.avi-register-wrap h2{text-align:center;color:#17216d;margin:12px 0 24px}
+.avi-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px 18px}
+.avi-field{display:flex;flex-direction:column;gap:7px}
+.avi-field.full{grid-column:1/-1}
+.avi-field label{font-weight:600;color:#24304f}
+.avi-field input{width:100%;min-height:48px;border:1px solid #d8dced;border-radius:11px;padding:10px 14px;background:#fff}
+.avi-register-wrap .btn.full{width:100%;margin-top:22px;min-height:50px;border-radius:12px;background:linear-gradient(100deg,#6d12d6,#241080);color:#fff;font-weight:700}
+.avi-register-footer{text-align:center;margin-top:20px;line-height:1.8;color:#334155}
+.avi-register-footer a{color:#1764dc;font-weight:600;text-decoration:none}
+.avi-register-footer a:hover{text-decoration:underline}
+.avi-otp-panel{margin-top:10px;padding:18px;background:#f8f7ff;border:1px solid #e2dcff;border-radius:14px}
+@media(max-width:620px){.avi-register-wrap{margin:12px;padding:22px 16px}.avi-brand strong{font-size:24px}.avi-brand img{width:56px;height:56px}.avi-form-grid{grid-template-columns:1fr}.avi-field.full{grid-column:auto}}
+</style>
+<div class="avi-register-wrap">
+  <div class="avi-brand">
+    <img src="{{ url_for('static', filename='icon.svg') }}" alt="AVI CLASSES Logo">
+    <div><strong>AVI CLASSES</strong><span>NCERT आधारित परीक्षा तैयारी प्लेटफॉर्म</span></div>
+  </div>
+  <h2>विद्यार्थी पंजीकरण · Student Registration</h2>
+  <form class="form-card" id="registerForm" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if not otp_pending %}
+    <div class="avi-form-grid">
+      <div class="avi-field full"><label>पूरा नाम · Full Name *</label><input name="name" required maxlength="120" placeholder="अपना पूरा नाम लिखें"></div>
+      <div class="avi-field"><label>Email Address *</label><input name="email" type="email" required placeholder="अपना ईमेल लिखें"></div>
+      <div class="avi-field"><label>मोबाइल नंबर · Phone Number *</label><input name="phone" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" required placeholder="10 अंकों का मोबाइल नंबर"></div>
+      <div class="avi-field"><label>Password *</label><input name="password" type="password" minlength="8" required placeholder="कम से कम 8 अक्षर"></div>
+      <div class="avi-field"><label>Confirm Password *</label><input name="confirm_password" type="password" minlength="8" required placeholder="पासवर्ड दोबारा लिखें"></div>
+    </div>
+    <button class="btn full" type="submit">Register · पंजीकरण करें</button>
+    {% else %}
+    <div class="avi-otp-panel">
+      <h3>मोबाइल OTP सत्यापन · OTP Verification</h3>
+      <p>आपके मोबाइल नंबर पर भेजे गए OTP को दर्ज करके अपना अकाउंट सुरक्षित रूप से सक्रिय करें।</p>
+      <label>मोबाइल नंबर</label><input id="otpPhone" type="tel" inputmode="numeric" maxlength="10" value="{{ session.get('otp_pending', {}).get('phone','')[2:] }}" readonly>
+      <button class="btn full" type="button" id="sendOtp">OTP भेजें · Send OTP</button>
+      <div id="otpArea" hidden><label>6 अंकों का OTP</label><input id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="OTP दर्ज करें"><button class="btn full" type="button" id="verifyOtp">Verify OTP · अकाउंट बनाएँ</button><button class="btn full" type="button" id="retryOtp">Resend OTP · OTP दोबारा भेजें</button></div>
+      <div id="msg91-captcha"></div><p id="otpMessage" role="status"></p>
+    </div>
+    {% endif %}
+  </form>
+  <div class="avi-register-footer">
+    पहले से अकाउंट है? Already have an account? <a href="{{ url_for('login') }}">Login / लॉगिन करें</a><br>
+    Register पर क्लिक करके आप हमारी <a href="{{ url_for('terms') }}">Terms &amp; Conditions · नियम एवं शर्तें</a> और
+    <a href="{{ url_for('privacy') }}">Privacy Policy · गोपनीयता नीति</a> से सहमत होते हैं।
+  </div>
+</div>
 {% if otp_pending %}
 <script>
 (() => {
  const cfg={{ otp_config|tojson }}; const csrf=document.querySelector('input[name=csrf_token]').value;
  const phone=document.getElementById('otpPhone'), msg=document.getElementById('otpMessage'); let ready=false, verifiedToken='';
  const tell=t=>msg.textContent=t;
- const init=()=>{if(ready || !window.msg91SdkLoaded){tell('OTP सेवा लोड हो रही है, कृपया कुछ सेकंड बाद प्रयास करें।');return;}window.initSendOTP({widgetId:cfg.widget_id,tokenAuth:cfg.widget_token,identifier:'',exposeMethods:true,captchaRenderId:'msg91-captcha',
- success:d=>{verifiedToken=(d&&(d.message||d.access_token||d.token))||'';},failure:e=>tell('OTP में समस्या: '+(e.message||'फिर प्रयास करें'))});ready=true;};
+ const init=()=>{if(ready || !window.msg91SdkLoaded){tell('OTP सेवा लोड हो रही है, कृपया कुछ सेकंड बाद प्रयास करें।');return;}window.initSendOTP({widgetId:cfg.widget_id,tokenAuth:cfg.widget_token,identifier:'',exposeMethods:true,captchaRenderId:'msg91-captcha',success:d=>{verifiedToken=(d&&(d.message||d.access_token||d.token))||'';},failure:e=>tell('OTP में समस्या: '+(e.message||'फिर प्रयास करें'))});ready=true;};
  document.getElementById('sendOtp').onclick=()=>{const n=phone.value.replace(/\D/g,'');if(!/^\d{10}$/.test(n)){tell('मोबाइल नंबर सही नहीं है।');return;}init();if(!ready)return;window.sendOtp('91'+n,()=>{document.getElementById('otpArea').hidden=false;tell('OTP भेज दिया गया है।');},e=>tell('OTP नहीं भेजा गया: '+(e.message||'फिर प्रयास करें')));};
- document.getElementById('retryOtp').onclick=()=>{
-  if(!ready){init();if(!ready)return;}
-  window.retryOtp(null,()=>tell('OTP दोबारा भेज दिया गया है।'),e=>tell('OTP दोबारा नहीं भेजा गया: '+((e&&e.message)||'फिर प्रयास करें')));
- };
- document.getElementById('verifyOtp').onclick=()=>{const code=document.getElementById('otpCode').value.trim();window.verifyOtp(code,d=>{const token=(d&&(d.message||d.access_token||d.token))||verifiedToken;if(!token){tell('MSG91 access token नहीं मिला।');return;}
- fetch('{{ url_for("otp_complete") }}',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({access_token:token,phone:'91'+phone.value.replace(/\D/g,'')})})
- .then(r=>r.json()).then(x=>{if(x.ok)location.href=x.redirect;else tell(x.message||'सत्यापन विफल');}).catch(()=>tell('नेटवर्क समस्या।'));},e=>tell('गलत OTP या OTP समाप्त।'));};
+ document.getElementById('retryOtp').onclick=()=>{if(!ready){init();if(!ready)return;}window.retryOtp(null,()=>tell('OTP दोबारा भेज दिया गया है।'),e=>tell('OTP दोबारा नहीं भेजा गया: '+((e&&e.message)||'फिर प्रयास करें')));};
+ document.getElementById('verifyOtp').onclick=()=>{const code=document.getElementById('otpCode').value.trim();window.verifyOtp(code,d=>{const token=(d&&(d.message||d.access_token||d.token))||verifiedToken;if(!token){tell('MSG91 access token नहीं मिला।');return;}fetch('{{ url_for("otp_complete") }}',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({access_token:token,phone:'91'+phone.value.replace(/\D/g,'')})}).then(r=>r.json()).then(x=>{if(x.ok)location.href=x.redirect;else tell(x.message||'सत्यापन विफल');}).catch(()=>tell('नेटवर्क समस्या।'));},e=>tell('गलत OTP या OTP समाप्त।'));};
 })();
 </script><script src="https://verify.msg91.com/otp-provider.js" onload="window.msg91SdkLoaded=true"></script>
-{% endif %}{% endblock %}
+{% endif %}
+{% endblock %}

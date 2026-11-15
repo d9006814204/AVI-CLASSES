@@ -452,10 +452,11 @@ def register():
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
         pw = request.form.get('password', '')
-        cn = request.form.get('class_no', '')
+        confirm_pw = request.form.get('confirm_password', '')
+        cn = '9'  # Registration form no longer asks students to select a class.
         phone = normalize_indian_phone(request.form.get('phone', ''))
-        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or cn not in [str(x) for x in CLASSES] or not phone:
-            flash('सही जानकारी भरें। मोबाइल नंबर 10 अंकों का और पासवर्ड कम से कम 8 अक्षरों का हो।', 'error')
+        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or pw != confirm_pw or not phone:
+            flash('सही जानकारी भरें। मोबाइल नंबर 10 अंकों का हो, पासवर्ड कम से कम 8 अक्षरों का हो और दोनों पासवर्ड समान हों।', 'error')
         elif User.query.filter_by(email=email).first():
             flash('यह ईमेल पहले से रजिस्टर है।', 'error')
         elif UserPhone.query.filter_by(phone=phone).first():
@@ -476,6 +477,16 @@ def register():
             }
             return render_template('register.html', otp_config=msg91_template_config(), otp_pending=True)
     return render_template('register.html', otp_config=msg91_template_config(), otp_pending=False)
+
+
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])
