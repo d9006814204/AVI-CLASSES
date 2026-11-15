@@ -257,6 +257,9 @@ with app.app_context():
     if 'set_no' not in question_columns:
         with db.engine.begin() as conn:
             conn.execute(text("ALTER TABLE question ADD COLUMN set_no INTEGER NOT NULL DEFAULT 1"))
+    if 'set_no' not in question_columns:
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE question ADD COLUMN set_no INTEGER NOT NULL DEFAULT 1"))
     admin_email=os.environ.get('ADMIN_EMAIL','admin@aviclasstr04.in').lower().strip()
     admin_password=os.environ.get('ADMIN_PASSWORD','')
     admin_user = User.query.filter_by(email=admin_email).first()
@@ -464,11 +467,10 @@ def register():
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
         pw = request.form.get('password', '')
-        confirm_pw = request.form.get('confirm_password', '')
-        cn = '9'  # Registration form no longer asks students to select a class.
+        cn = request.form.get('class_no', '')
         phone = normalize_indian_phone(request.form.get('phone', ''))
-        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or pw != confirm_pw or not phone:
-            flash('सही जानकारी भरें। मोबाइल नंबर 10 अंकों का हो, पासवर्ड कम से कम 8 अक्षरों का हो और दोनों पासवर्ड समान हों।', 'error')
+        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or cn not in [str(x) for x in CLASSES] or not phone:
+            flash('सही जानकारी भरें। मोबाइल नंबर 10 अंकों का और पासवर्ड कम से कम 8 अक्षरों का हो।', 'error')
         elif User.query.filter_by(email=email).first():
             flash('यह ईमेल पहले से रजिस्टर है।', 'error')
         elif UserPhone.query.filter_by(phone=phone).first():
@@ -489,26 +491,6 @@ def register():
             }
             return render_template('register.html', otp_config=msg91_template_config(), otp_pending=True)
     return render_template('register.html', otp_config=msg91_template_config(), otp_pending=False)
-
-
-@app.route('/terms')
-def terms():
-    return render_template('terms.html')
-
-
-@app.route('/privacy')
-def privacy():
-    return render_template('privacy.html')
-
-
-@app.route('/terms')
-def terms():
-    return render_template('terms.html')
-
-
-@app.route('/privacy')
-def privacy():
-    return render_template('privacy.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1076,6 +1058,12 @@ def checkout_page(kind, key):
         title, amount, icon, product_key = EXAM_CATEGORIES[key] + ' Test Series', 2900, '📝', key
     else:
         abort(404)
+    # Admin preview access: administrators can open paid content without checkout.
+    if session.get('role') == 'admin':
+        target = (url_for('learning_item', item_id=int(product_key)) if kind == 'course' and product_key.isdigit()
+                  else (url_for('learning_exam', slug=product_key) if kind == 'course'
+                        else url_for('exam_test_series', slug=product_key)))
+        return redirect(target)
     if has_purchase(session['user_id'], kind, product_key):
         return redirect(url_for('learning_item', item_id=int(product_key)) if kind == 'course' and product_key.isdigit() else (url_for('learning_exam', slug=product_key) if kind == 'course' else url_for('exam_test_series', slug=product_key)))
     return render_template('checkout.html', kind=kind, product_key=product_key,
@@ -1108,6 +1096,10 @@ def purchase_create():
     else:
         abort(400)
 
+    # Never create a Razorpay order for an administrator. Admins receive preview access only.
+    if session.get('role') == 'admin':
+        target = ((url_for('learning_item', item_id=int(product_key)) if product_key.isdigit() else url_for('learning_exam', slug=product_key)) if kind == 'course' else url_for('exam_test_series', slug=product_key))
+        return jsonify(ok=True, admin_access=True, redirect=target)
     if has_purchase(session['user_id'], kind, product_key):
         target = ((url_for('learning_item', item_id=int(product_key)) if product_key.isdigit() else url_for('learning_exam', slug=product_key)) if kind == 'course' else url_for('exam_test_series', slug=product_key))
         return jsonify(ok=True, already_paid=True, redirect=target)
