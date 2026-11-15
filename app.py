@@ -98,6 +98,7 @@ class User(db.Model):
     id=db.Column(db.Integer,primary_key=True); name=db.Column(db.String(120),nullable=False)
     email=db.Column(db.String(255),unique=True,nullable=False,index=True); password=db.Column(db.String(255),nullable=False)
     role=db.Column(db.String(20),nullable=False,default='student'); class_no=db.Column(db.Integer)
+    state=db.Column(db.String(80)); city=db.Column(db.String(100))
     created_at=db.Column(db.DateTime,default=datetime.utcnow)
 class LoginThrottle(db.Model):
     # Additive security table; existing users, questions and attempts are untouched.
@@ -124,6 +125,8 @@ class PendingRegistration(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     class_no = db.Column(db.Integer, nullable=False)
     phone = db.Column(db.String(16), nullable=False)
+    state = db.Column(db.String(80), nullable=True)
+    city = db.Column(db.String(100), nullable=True)
     expires_at = db.Column(db.DateTime, nullable=False)
 
 
@@ -238,6 +241,15 @@ class BillingSubscription(db.Model):
 
 with app.app_context():
     db.create_all()
+    # Safe additive registration profile fields; existing accounts remain unchanged.
+    user_columns={col['name'] for col in inspect(db.engine).get_columns('user')}
+    with db.engine.begin() as conn:
+        if 'state' not in user_columns: conn.execute(text("ALTER TABLE user ADD COLUMN state VARCHAR(80)"))
+        if 'city' not in user_columns: conn.execute(text("ALTER TABLE user ADD COLUMN city VARCHAR(100)"))
+    pending_columns={col['name'] for col in inspect(db.engine).get_columns('pending_registration')}
+    with db.engine.begin() as conn:
+        if 'state' not in pending_columns: conn.execute(text("ALTER TABLE pending_registration ADD COLUMN state VARCHAR(80)"))
+        if 'city' not in pending_columns: conn.execute(text("ALTER TABLE pending_registration ADD COLUMN city VARCHAR(100)"))
     # Safe additive migration: preserve all existing LearningItem records.
     learning_columns={col['name'] for col in inspect(db.engine).get_columns('learning_item')}
     if 'content_date' not in learning_columns:
@@ -462,12 +474,11 @@ def home():
 
 
 @app.route('/terms')
-def terms():
+def terms_page():
     return render_template('terms.html')
 
-
 @app.route('/privacy')
-def privacy():
+def privacy_page():
     return render_template('privacy.html')
 
 
@@ -477,10 +488,13 @@ def register():
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
         pw = request.form.get('password', '')
-        cn = request.form.get('class_no', '')
+        confirm_pw = request.form.get('confirm_password', '')
+        state = request.form.get('state', '').strip()[:80]
+        city = request.form.get('city', '').strip()[:100]
+        cn = '9'  # Class selection is intentionally not shown on registration.
         phone = normalize_indian_phone(request.form.get('phone', ''))
-        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or cn not in [str(x) for x in CLASSES] or not phone:
-            flash('सही जानकारी भरें। मोबाइल नंबर 10 अंकों का और पासवर्ड कम से कम 8 अक्षरों का हो।', 'error')
+        if not name or len(name) > 120 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(pw) < 8 or pw != confirm_pw or not state or not city or not phone:
+            flash('सही जानकारी भरें। दोनों पासवर्ड समान हों, राज्य/शहर चुनें और मोबाइल नंबर 10 अंकों का हो।', 'error')
         elif User.query.filter_by(email=email).first():
             flash('यह ईमेल पहले से रजिस्टर है।', 'error')
         elif UserPhone.query.filter_by(phone=phone).first():
@@ -492,7 +506,7 @@ def register():
             db.session.add(PendingRegistration(
                 nonce=nonce, name=name, email=email,
                 password_hash=generate_password_hash(pw), class_no=int(cn),
-                phone=phone, expires_at=datetime.utcnow() + __import__('datetime').timedelta(minutes=10)
+                phone=phone, state=state, city=city, expires_at=datetime.utcnow() + __import__('datetime').timedelta(minutes=10)
             ))
             db.session.commit()
             session['otp_pending'] = {
@@ -613,7 +627,7 @@ def otp_complete():
         try:
             user = User(name=staged.name, email=staged.email,
                         password=staged.password_hash, role='student',
-                        class_no=int(staged.class_no))
+                        class_no=int(staged.class_no), state=staged.state, city=staged.city)
             db.session.add(user)
             db.session.flush()
             db.session.add(UserPhone(user_id=user.id, phone=phone))
