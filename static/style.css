@@ -122,3 +122,8 @@ body.avi-home-page{background:#f5f6ff}
 @media(max-width:390px){.avi-final-card-grid{grid-template-columns:1fr}.avi-final-hero-art{display:none}.avi-final-stats{grid-template-columns:1fr 1fr}}
 .avi-student-page .site-header,.avi-student-page .main-nav,.avi-student-page .site-footer{display:none!important}.avi-student-page .container{width:100%;max-width:none;margin:0;padding:0}.avi-student-page .page-print-bar{display:none!important}
 .avi-student-page .site-header,.avi-student-page .main-nav,.avi-student-page .site-footer{display:none!important}.avi-student-page .container{width:100%;max-width:none;margin:0;padding:0}.avi-student-page .page-print-bar{display:none!important}
+
+/* Registration legal links */
+.avi-legal-links{margin:14px 0 0;text-align:center;font-size:13px;line-height:1.7;color:#64748b}
+.avi-legal-links a{color:#2458d3;text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.avi-legal-links a:hover{color:#6d16c9}

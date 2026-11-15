@@ -15,7 +15,10 @@
 <div id="otpArea" hidden><label>OTP</label><input id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="OTP दर्ज करें"><button class="btn full" type="button" id="verifyOtp">OTP Verify करके अकाउंट बनाएँ</button><button class="btn full" type="button" id="retryOtp">OTP दोबारा भेजें</button></div>
 <div id="msg91-captcha"></div><p id="otpMessage" role="status"></p>
 {% endif %}
-<p class="form-foot">पहले से अकाउंट है? <a href="{{ url_for('login') }}">लॉगिन करें</a></p></form></div>
+<p class="form-foot">पहले से अकाउंट है? <a href="{{ url_for('login') }}">लॉगिन करें</a></p>
+<p class="avi-legal-links">By clicking Register, you agree to our
+<a href="{{ url_for('terms') }}">Terms &amp; Conditions</a> and
+<a href="{{ url_for('privacy') }}">Privacy Policy</a>.</p></form></div>
 {% if otp_pending %}
 <script>
 (() => {

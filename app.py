@@ -461,6 +461,16 @@ def home():
     return render_template('home.html',total=total,counts=counts,recent_items=recent_items,subjects=subjects,attempts=attempts,courses=courses)
 
 
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
