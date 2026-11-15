@@ -1,5 +1,6 @@
-import os, csv, io, secrets, re, hmac, hashlib, json, importlib, urllib.request, urllib.error
+import os, csv, io, secrets, re, hmac, hashlib, json, importlib, urllib.request, urllib.error, smtplib
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from functools import wraps
 from urllib.parse import urlparse
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, jsonify, make_response, send_from_directory
@@ -545,27 +546,83 @@ def login():
     return render_template('login.html')
 
 
+def send_password_reset_email(to_email, code):
+    host = os.environ.get('SMTP_HOST', '').strip()
+    port = int(os.environ.get('SMTP_PORT', '587'))
+    username = os.environ.get('SMTP_USERNAME', '').strip()
+    password = os.environ.get('SMTP_PASSWORD', '')
+    sender = os.environ.get('SMTP_FROM_EMAIL', username).strip()
+    if not all([host, username, password, sender]):
+        raise RuntimeError('Email OTP के लिए SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD और SMTP_FROM_EMAIL सेट करें।')
+    msg = EmailMessage()
+    msg['Subject'] = 'AVI CLASSES - Password Reset OTP'
+    msg['From'] = sender
+    msg['To'] = to_email
+    msg.set_content(
+        f'''नमस्ते,
+
+आपका AVI CLASSES पासवर्ड रीसेट OTP है: {code}
+
+यह OTP 5 मिनट तक मान्य है। यदि आपने पासवर्ड रीसेट का अनुरोध नहीं किया है, तो इस ईमेल को अनदेखा करें।
+
+AVI CLASSES'''
+    )
+    with smtplib.SMTP(host, port, timeout=15) as server:
+        server.starttls()
+        server.login(username, password)
+        server.send_message(msg)
+
+
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    """Start a password reset using the already-verified mobile number on a student account."""
+    """Find the student by registered phone or email, then let them choose OTP channel."""
     if request.method == 'POST':
-        phone = normalize_indian_phone(request.form.get('phone', ''))
-        if not phone:
-            flash('कृपया सही 10 अंकों का मोबाइल नंबर डालें।', 'error')
-            return render_template('forgot_password.html', otp_pending=False)
-        phone_row = UserPhone.query.filter_by(phone=phone).first()
-        user = db.session.get(User, phone_row.user_id) if phone_row else None
-        # Do not disclose whether a phone number is registered.
+        identifier = request.form.get('identifier', '').strip()
+        user = None
+        if '@' in identifier:
+            user = User.query.filter(func.lower(User.email) == identifier.lower()).first()
+        else:
+            phone = normalize_indian_phone(identifier)
+            phone_row = UserPhone.query.filter_by(phone=phone).first() if phone else None
+            user = db.session.get(User, phone_row.user_id) if phone_row else None
         if not user or user.role != 'student':
-            flash('यदि इस नंबर से विद्यार्थी अकाउंट जुड़ा है, तो OTP सत्यापन उपलब्ध होगा। सही रजिस्टर्ड नंबर जाँचें या Admin से संपर्क करें।', 'info')
+            flash('यदि यह जानकारी किसी विद्यार्थी अकाउंट से जुड़ी है, तो OTP विकल्प उपलब्ध होगा। रजिस्टर्ड मोबाइल या ईमेल जाँचें।', 'info')
             return render_template('forgot_password.html', otp_pending=False)
+        phone_row = UserPhone.query.filter_by(user_id=user.id).first()
         session.pop('password_reset_verified', None)
         session['otp_pending'] = {
-            'purpose': 'forgot_password', 'user_id': user.id, 'phone': phone,
-            'created_at': datetime.utcnow().timestamp()
+            'purpose': 'forgot_password', 'user_id': user.id,
+            'phone': phone_row.phone if phone_row else '',
+            'email': user.email, 'created_at': datetime.utcnow().timestamp()
         }
-        return render_template('forgot_password.html', otp_pending=True, pending_phone=phone)
+        return render_template('forgot_password.html', otp_pending=True,
+                               pending_phone=phone_row.phone if phone_row else '',
+                               pending_email=user.email, otp_config=msg91_template_config())
     return render_template('forgot_password.html', otp_pending=False)
+
+
+@app.route('/forgot-password/send-email-otp', methods=['POST'])
+def send_password_reset_email_otp():
+    pending = session.get('otp_pending') or {}
+    if pending.get('purpose') != 'forgot_password' or datetime.utcnow().timestamp() - float(pending.get('created_at', 0)) > 600:
+        return jsonify(ok=False, message='प्रक्रिया समाप्त हो गई। दोबारा शुरू करें।'), 400
+    email = (pending.get('email') or '').strip().lower()
+    user = db.session.get(User, int(pending.get('user_id', 0)))
+    if not user or user.role != 'student' or user.email.lower() != email:
+        return jsonify(ok=False, message='रजिस्टर्ड ईमेल सत्यापित नहीं हो सका।'), 400
+    code = f'{secrets.randbelow(1000000):06d}'
+    salt = secrets.token_hex(16)
+    digest = hashlib.sha256((salt + code + app.config['SECRET_KEY']).encode()).hexdigest()
+    try:
+        send_password_reset_email(email, code)
+    except Exception as exc:
+        app.logger.exception('Password reset email OTP delivery failed')
+        return jsonify(ok=False, message='ईमेल OTP नहीं भेजा जा सका। Admin से SMTP सेटिंग जाँचने को कहें।'), 503
+    pending.update({'email_otp_salt': salt, 'email_otp_hash': digest,
+                    'email_otp_expires': datetime.utcnow().timestamp() + 300,
+                    'email_otp_attempts': 0, 'channel': 'email'})
+    session['otp_pending'] = pending
+    return jsonify(ok=True, message='रजिस्टर्ड ईमेल पर OTP भेज दिया गया है।')
 
 
 @app.route('/reset-password', methods=['GET', 'POST'])
@@ -604,16 +661,36 @@ def otp_complete():
         session.pop('otp_pending', None)
         return jsonify(ok=False, message='OTP प्रक्रिया समाप्त हो गई। दोबारा शुरू करें।'), 400
     data = request.get_json(silent=True) or {}
+    purpose = pending.get('purpose')
+    if purpose == 'forgot_password' and data.get('channel') == 'email':
+        code = str(data.get('code', '')).strip()
+        expected = pending.get('email_otp_hash', '')
+        salt = pending.get('email_otp_salt', '')
+        if (not code.isdigit() or len(code) != 6 or not expected or
+                datetime.utcnow().timestamp() > float(pending.get('email_otp_expires', 0)) or
+                int(pending.get('email_otp_attempts', 0)) >= 5):
+            return jsonify(ok=False, message='OTP समाप्त हो गया है। नया OTP मँगाएँ।'), 400
+        actual = hashlib.sha256((salt + code + app.config['SECRET_KEY']).encode()).hexdigest()
+        if not hmac.compare_digest(actual, expected):
+            pending['email_otp_attempts'] = int(pending.get('email_otp_attempts', 0)) + 1
+            session['otp_pending'] = pending
+            return jsonify(ok=False, message='गलत OTP। दोबारा जाँचें।'), 401
+        user = db.session.get(User, int(pending.get('user_id', 0)))
+        if not user or user.role != 'student' or user.email.lower() != (pending.get('email') or '').lower():
+            return jsonify(ok=False, message='ईमेल अकाउंट से मेल नहीं खाता।'), 403
+        session.pop('otp_pending', None)
+        session['password_reset_verified'] = {'user_id': user.id, 'created_at': datetime.utcnow().timestamp()}
+        return jsonify(ok=True, redirect=url_for('reset_password'))
+
     access_token = str(data.get('access_token', '')).strip()
     phone = normalize_indian_phone(data.get('phone') or pending.get('phone') or '')
     if not access_token or not phone:
-        return jsonify(ok=False, message='मोबाइल नंबर और OTP verification जरूरी है।'), 400
+        return jsonify(ok=False, message='मोबाइल OTP verification जरूरी है।'), 400
     if pending.get('phone') and pending['phone'] != phone:
         return jsonify(ok=False, message='मोबाइल नंबर मेल नहीं खाता।'), 400
     if not msg91_verify_access_token(access_token, phone):
         return jsonify(ok=False, message='MSG91 OTP सत्यापन नहीं हो सका। दोबारा प्रयास करें।'), 401
 
-    purpose = pending.get('purpose')
     if purpose == 'register':
         staged = PendingRegistration.query.filter_by(nonce=pending.get('nonce')).first()
         if not staged or staged.expires_at < datetime.utcnow():

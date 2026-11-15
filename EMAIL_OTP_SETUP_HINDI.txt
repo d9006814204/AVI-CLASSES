@@ -1,0 +1,18 @@
+AVI CLASSES - Forgot Password Email + Mobile OTP
+
+इस अपडेट में विद्यार्थी रजिस्टर्ड मोबाइल या ईमेल से अकाउंट खोज सकता है और फिर मोबाइल SMS OTP (MSG91) या ईमेल OTP में से कोई एक चुन सकता है।
+
+EMAIL OTP चालू करने के लिए Render Dashboard > AVI CLASSES > Environment में ये Environment Variables जोड़ें:
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=आपका पूरा Gmail पता
+SMTP_PASSWORD=Gmail App Password (सामान्य Gmail पासवर्ड नहीं)
+SMTP_FROM_EMAIL=आपका पूरा Gmail पता
+
+Gmail उपयोग करने पर Google Account में 2-Step Verification चालू करके App Password बनाएँ। App Password को किसी से साझा न करें।
+
+SMS OTP के लिए मौजूदा MSG91_WIDGET_ID, MSG91_WIDGET_TOKEN और MSG91_AUTHKEY सेट रहने चाहिए।
+
+फिर GitHub में अपडेट की गई फाइलें commit/push करें और Render deploy पूरा होने दें।
+डेटाबेस को delete/reset करने की जरूरत नहीं है।
