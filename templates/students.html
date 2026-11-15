@@ -1,1 +1,43 @@
-{% extends 'base.html' %}{% block content %}<div class="page-title"><div><div class="eyebrow">STUDENT DIRECTORY</div><h1>विद्यार्थी सूची</h1><p>नवीनतम 500 रजिस्ट्रेशन।</p></div></div><div class="table-card"><div class="table-scroll"><table><thead><tr><th>नाम</th><th>Email</th><th>कक्षा</th><th>रजिस्ट्रेशन</th></tr></thead><tbody>{% for u in rows %}<tr><td>{{u.name}}</td><td>{{u.email}}</td><td>{{u.class_no}}</td><td>{{u.created_at.strftime('%d-%m-%Y')}}</td></tr>{% else %}<tr><td colspan="4">अभी कोई विद्यार्थी नहीं।</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <div class="eyebrow">STUDENT DIRECTORY</div>
+    <h1>विद्यार्थी सूची</h1>
+    <p>नवीनतम 500 रजिस्ट्रेशन।</p>
+  </div>
+</div>
+<div class="table-card">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>नाम</th><th>Email</th><th>मोबाइल नंबर</th><th>कक्षा</th><th>रजिस्ट्रेशन</th><th>मोबाइल अपडेट</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in rows %}
+        <tr>
+          <td>{{ u.name }}</td>
+          <td>{{ u.email }}</td>
+          <td>{{ phone_map.get(u.id, 'उपलब्ध नहीं') }}</td>
+          <td>{{ u.class_no }}</td>
+          <td>{{ u.created_at.strftime('%d-%m-%Y') if u.created_at else '-' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_update_student_phone', user_id=u.id) }}" style="display:flex;gap:8px;align-items:center;min-width:260px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="tel" name="phone" inputmode="numeric" pattern="[0-9]{10}" maxlength="10"
+                     placeholder="10 अंकों का मोबाइल" value="{{ phone_map.get(u.id, '')[2:] if phone_map.get(u.id, '') else '' }}"
+                     required style="max-width:165px;padding:9px 10px;border:1px solid #d7def0;border-radius:9px">
+              <button type="submit" class="btn btn-primary" style="padding:9px 12px">सेव करें</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">अभी कोई विद्यार्थी नहीं।</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

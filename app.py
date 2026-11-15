@@ -1563,7 +1563,38 @@ def delete_content(item_id):
 @app.route('/admin/students')
 @login_required('admin')
 def students_list():
-    rows=User.query.filter_by(role='student').order_by(User.created_at.desc()).limit(500).all(); return render_template('students.html',rows=rows)
+    rows = User.query.filter_by(role='student').order_by(User.created_at.desc()).limit(500).all()
+    phone_rows = UserPhone.query.filter(UserPhone.user_id.in_([u.id for u in rows])).all() if rows else []
+    phone_map = {p.user_id: p.phone for p in phone_rows}
+    return render_template('students.html', rows=rows, phone_map=phone_map)
+
+
+@app.route('/admin/students/<int:user_id>/update-phone', methods=['POST'])
+@login_required('admin')
+def admin_update_student_phone(user_id):
+    user = User.query.filter_by(id=user_id, role='student').first_or_404()
+    phone = normalize_indian_phone(request.form.get('phone', ''))
+    if not phone:
+        flash('कृपया सही 10 अंकों का मोबाइल नंबर डालें।', 'error')
+        return redirect(url_for('students_list'))
+    existing = UserPhone.query.filter_by(phone=phone).first()
+    if existing and existing.user_id != user.id:
+        flash('यह मोबाइल नंबर किसी दूसरे विद्यार्थी के अकाउंट से जुड़ा है।', 'error')
+        return redirect(url_for('students_list'))
+    try:
+        phone_row = UserPhone.query.filter_by(user_id=user.id).first()
+        if phone_row:
+            phone_row.phone = phone
+            phone_row.verified_at = datetime.utcnow()
+        else:
+            db.session.add(UserPhone(user_id=user.id, phone=phone, verified_at=datetime.utcnow()))
+        db.session.commit()
+        flash(f'{user.name} का मोबाइल नंबर सफलतापूर्वक अपडेट हो गया।', 'success')
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception('Admin student phone update failed for user_id=%s', user.id)
+        flash('मोबाइल नंबर अपडेट नहीं हो सका। कृपया दोबारा प्रयास करें।', 'error')
+    return redirect(url_for('students_list'))
 @app.route('/admin/change-password',methods=['GET','POST'])
 @login_required()
 def change_password():
