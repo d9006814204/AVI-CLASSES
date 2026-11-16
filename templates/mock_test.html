@@ -41,9 +41,11 @@
   status.textContent=`Roshani जी प्रश्न ${current+1} पढ़ रही हैं…`;
   try{
    const res=await fetch('/api/avi-voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:queue[current]})});
-   const data=await res.json();
+   const raw=await res.text();
+   let data={};
+   try{data=JSON.parse(raw);}catch(_){throw new Error(`Server ने JSON के बजाय HTML/अमान्य जवाब दिया (HTTP ${res.status})। Render Logs जाँचें।`);}
    if(thisRequest!==requestNo)return;
-   if(!res.ok||!data.audio_url)throw new Error(data.error||'TTS request failed');
+   if(!res.ok||!data.audio_url)throw new Error(data.error||`TTS request failed (HTTP ${res.status})`);
    audio=new Audio(data.audio_url);
    audio.onended=()=>{if(thisRequest!==requestNo)return;current++;playNext();};
    audio.onerror=()=>{status.textContent='ऑडियो चलाने में समस्या हुई।';};
