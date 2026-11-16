@@ -940,6 +940,52 @@ def toggle_question(qid):
 def delete_question(qid):
     q=Question.query.get_or_404(qid); db.session.delete(q); db.session.commit(); flash('प्रश्न हटाया गया।','success'); return redirect(request.referrer or url_for('admin'))
 
+@app.route('/admin/questions/bulk-delete', methods=['POST'])
+@login_required('admin')
+def bulk_delete_questions():
+    # Delete either explicitly selected IDs or every question matching the current filters.
+    selected_ids = []
+    for value in request.form.getlist('question_ids'):
+        try:
+            selected_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+
+    if request.form.get('delete_all_filtered') == '1':
+        query = Question.query
+        cn = request.form.get('class_no', '')
+        sub = request.form.get('subject', '')
+        status = request.form.get('status', '')
+        exam_slug = request.form.get('exam_slug', '')
+        if cn.isdigit() and int(cn) in CLASSES:
+            query = query.filter_by(class_no=int(cn))
+        if sub in SUBJECTS:
+            query = query.filter_by(subject=sub)
+        if exam_slug in EXAM_CATEGORIES:
+            query = query.filter_by(exam_slug=exam_slug)
+        if status == 'live':
+            query = query.filter_by(published=True)
+        elif status == 'draft':
+            query = query.filter_by(published=False)
+        targets = query.all()
+        mode = 'फिल्टर से मेल खाते'
+    else:
+        targets = Question.query.filter(Question.id.in_(set(selected_ids))).all() if selected_ids else []
+        mode = 'चुने गए'
+
+    if not targets:
+        flash('हटाने के लिए कोई प्रश्न नहीं चुना गया।', 'warning')
+    else:
+        count = len(targets)
+        for question in targets:
+            db.session.delete(question)
+        db.session.commit()
+        flash(f'{count} {mode} प्रश्न सफलतापूर्वक हटा दिए गए।', 'success')
+
+    return redirect(url_for('question_bank', class_no=request.form.get('class_no', ''),
+                            subject=request.form.get('subject', ''), status=request.form.get('status', ''),
+                            exam_slug=request.form.get('exam_slug', '')))
+
 def normalize_import_row(row):
     aliases = {'id':['id','question_id'],'class_no':['class_no','class'],'subject':['subject'],'chapter':['chapter'],'question':['question'],'a':['a','option_a'],'b':['b','option_b'],'c':['c','option_c'],'d':['d','option_d'],'answer':['answer','correct_answer'],'explanation':['explanation'],'exam_slug':['exam_slug','exam'],'set_no':['set_no','set','set_number']}
     lowered={str(k).strip().lower():('' if v is None else str(v).strip()) for k,v in (row or {}).items() if k is not None}
