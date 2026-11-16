@@ -1,5 +1,53 @@
 {% extends 'base.html' %}{% block content %}
 <div class="page-title"><div><div class="eyebrow">AVI CLASSES • PAID COURSE</div><h1>{{category_title}}</h1><p>आपके कोर्स की सभी पढ़ाई की सामग्री एक ही जगह।</p></div><a class="btn btn-outline" href="{{url_for('home')}}">← वापस</a></div>
+{% if exam_slug == 'tre-teacher' %}
+<section class="table-card tre-voice-panel" aria-label="महिला टीचर वॉइस">
+ <h2>👩‍🏫 AVI महिला टीचर</h2>
+ <p>इस BPSC TRE-04 कोर्स की पढ़ाई हिंदी आवाज़ में सुनें।</p>
+ <div class="tre-voice-actions">
+  <button type="button" class="btn btn-large" id="treSpeak">🔊 पढ़कर सुनें</button>
+  <button type="button" class="btn btn-outline" id="trePause">⏸ रोकें</button>
+  <button type="button" class="btn btn-outline" id="treResume">▶ जारी रखें</button>
+  <button type="button" class="btn btn-outline" id="treStop">■ बंद करें</button>
+ </div>
+ <small id="treVoiceStatus" role="status">हिंदी महिला आवाज़ उपलब्ध होने पर उसका चयन किया जाएगा।</small>
+</section>
+<style>
+.tre-voice-panel{margin:18px 0;border:1px solid #e8c9f7;background:linear-gradient(135deg,#fff4fa,#f5efff)}
+.tre-voice-actions{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}
+#treVoiceStatus{display:block;color:#5b5268}
+@media(max-width:520px){.tre-voice-actions .btn{flex:1 1 42%;font-size:13px;padding:10px}}
+</style>
+<script>
+(function(){
+ const root=document.querySelector('.tre-voice-panel'); if(!root || !('speechSynthesis' in window)) return;
+ const synth=window.speechSynthesis, status=document.getElementById('treVoiceStatus'); let utterance;
+ function pickHindiVoice(){
+  const voices=synth.getVoices().filter(v=>/^hi(-|_|$)/i.test(v.lang));
+  return voices.find(v=>/female|woman|heera|kalpana|swara|aditi|neerja/i.test(v.name)) || voices[0] || null;
+ }
+ function speak(){
+  synth.cancel();
+  const content=document.querySelector('main') || document.querySelector('.container') || document.body;
+  const clone=content.cloneNode(true);
+  clone.querySelectorAll('.tre-voice-panel,script,style,button,a,nav,header,footer').forEach(el=>el.remove());
+  const text=(clone.innerText||clone.textContent||'').replace(/\s+/g,' ').trim();
+  if(!text){status.textContent='सुनाने के लिए अभी सामग्री उपलब्ध नहीं है।';return;}
+  utterance=new SpeechSynthesisUtterance(text); utterance.lang='hi-IN'; utterance.rate=0.9; utterance.pitch=1.08;
+  const voice=pickHindiVoice(); if(voice) utterance.voice=voice;
+  utterance.onstart=()=>status.textContent='महिला टीचर पढ़ा रही हैं…';
+  utterance.onend=()=>status.textContent='पढ़ना पूरा हुआ।';
+  utterance.onerror=()=>status.textContent='आवाज़ उपलब्ध नहीं हुई। कृपया डिवाइस की हिंदी आवाज़ जाँचें।';
+  synth.speak(utterance);
+ }
+ document.getElementById('treSpeak').addEventListener('click',speak);
+ document.getElementById('trePause').addEventListener('click',()=>{if(synth.speaking)synth.pause();});
+ document.getElementById('treResume').addEventListener('click',()=>synth.resume());
+ document.getElementById('treStop').addEventListener('click',()=>{synth.cancel();status.textContent='पढ़ना बंद कर दिया गया।';});
+ if(synth.onvoiceschanged!==undefined)synth.onvoiceschanged=()=>{};
+})();
+</script>
+{% endif %}
 {% if not purchased %}<section class="table-card"><h2>🔒 Course Locked</h2><p>सभी टेस्ट सेट, PDF और वीडियो देखने के लिए कोर्स खरीदें।</p><a class="btn btn-large" href="{{url_for('checkout_page',kind='course',key=exam_slug)}}">Buy Course</a></section>{% else %}
 <section class="table-card"><h2>📝 Online Test Series</h2><p>SET-01 से SET-05 • हर सेट में 150 प्रश्न • 150 मिनट</p><a class="btn btn-large" href="{{url_for('exam_test_series',slug=exam_slug)}}">5 Test Sets खोलें →</a></section>
 <div class="content-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:20px 0">{% for key,label in folder_labels.items() %}<a class="content-card" href="#folder-{{key}}"><h2>{{'📚' if key=='question-bank' else ('📄' if key=='pdf-notes' else ('🎥' if key=='video-classes' else '📰'))}} {{label}}</h2><p>{{folder_items[key]|length}} सामग्री उपलब्ध</p></a>{% endfor %}</div>
