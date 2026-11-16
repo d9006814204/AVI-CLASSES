@@ -884,7 +884,7 @@ def question_bank():
         query=query.filter_by(exam_slug=exam_slug)
     if status=='live': query=query.filter_by(published=True)
     elif status=='draft': query=query.filter_by(published=False)
-    page=max(1,request.args.get('page',1,type=int)); pagination=query.order_by(Question.id.desc()).paginate(page=page,per_page=30,error_out=False)
+    page=max(1,request.args.get('page',1,type=int)); pagination=query.order_by(Question.id.desc()).paginate(page=page,per_page=100,error_out=False)
     return render_template('question_bank.html',pagination=pagination,filter_class=cn,filter_subject=sub,status=status,filter_exam=exam_slug,exam_categories=EXAM_CATEGORIES)
 
 @app.route('/admin/questions/export.xlsx')
