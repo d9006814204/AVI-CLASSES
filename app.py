@@ -887,6 +887,48 @@ def question_bank():
     page=max(1,request.args.get('page',1,type=int)); pagination=query.order_by(Question.id.desc()).paginate(page=page,per_page=30,error_out=False)
     return render_template('question_bank.html',pagination=pagination,filter_class=cn,filter_subject=sub,status=status,filter_exam=exam_slug,exam_categories=EXAM_CATEGORIES)
 
+@app.route('/admin/questions/export.xlsx')
+@login_required('admin')
+def export_questions_excel():
+    """Download the complete question bank (published and draft) as Excel."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    questions = Question.query.order_by(Question.id.asc()).all()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Question Bank'
+    headers = ['ID', 'कक्षा', 'परीक्षा', 'विषय', 'अध्याय', 'प्रश्न',
+               'विकल्प A', 'विकल्प B', 'विकल्प C', 'विकल्प D',
+               'सही उत्तर', 'व्याख्या', 'Status', 'Set No', 'Created At']
+    ws.append(headers)
+    for q in questions:
+        ws.append([q.id, q.class_no, EXAM_CATEGORIES.get(q.exam_slug, q.exam_slug or ''),
+                   q.subject, q.chapter or '', q.question, q.a, q.b, q.c, q.d,
+                   q.answer, q.explanation or '', 'Published' if q.published else 'Draft',
+                   q.set_no, q.created_at.strftime('%Y-%m-%d %H:%M:%S') if q.created_at else ''])
+    header_fill = PatternFill('solid', fgColor='243B75')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = ws.dimensions
+    widths = [10, 10, 22, 18, 24, 55, 32, 32, 32, 32, 14, 55, 14, 10, 21]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(vertical='top', wrap_text=True)
+    ws.row_dimensions[1].height = 30
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    filename = 'AVI-CLASSES-Question-Bank.xlsx'
+    return send_file(output, as_attachment=True, download_name=filename,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
 @app.route('/admin/questions/<int:qid>/toggle',methods=['POST'])
 @login_required('admin')
 def toggle_question(qid):
