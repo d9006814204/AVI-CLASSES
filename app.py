@@ -1507,6 +1507,7 @@ def submit_exam_set(slug, set_no):
 
 
 @app.route('/api/avi-voice', methods=['POST'])
+@csrf.exempt
 @login_required('student')
 def avi_roshani_voice_tts():
     """Generate Hindi speech using the approved Roshani Kumari HeyGen voice clone."""
