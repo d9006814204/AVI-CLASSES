@@ -1,10 +1,9 @@
 {% extends 'base.html' %}{% block content %}
 <div class="page-title"><div><div class="eyebrow">AVI CLASSES • COMBINED MOCK TEST</div><h1>{{ test_title or "सभी विषयों का 150 प्रश्नों वाला टेस्ट" }}</h1><p>कक्षा {{ class_no }} • सभी प्रकाशित विषयों से प्रश्न</p></div><div class="class-chip">150 QUESTIONS</div></div>
 {% if shortage %}<section class="table-card"><h2>अभी 150 प्रश्न उपलब्ध नहीं हैं</h2><p>कक्षा {{ class_no }} में अभी कुल <b>{{ available }}</b> प्रकाशित प्रश्न उपलब्ध हैं। टेस्ट शुरू करने के लिए कम-से-कम 150 प्रकाशित प्रश्न चाहिए।</p><h3>विषय के अनुसार उपलब्ध प्रश्न</h3><ul>{% for name,count in subject_counts.items() %}<li>{{ name }}: {{ count }}</li>{% endfor %}</ul><p>Admin को Question Bank में सभी विषयों के प्रश्न जोड़कर <b>Publish</b> करने होंगे। Publish होते ही वे अगले टेस्ट में अपने आप शामिल होंगे।</p></section>
-{% else %}{% if test_slug == 'stet-btet' %}
-<section class="table-card stet-ai-panel" aria-label="AVI महिला AI टीचर">
- <h2>👩‍🏫 AVI महिला टीचर</h2>
- <p>STET/BTET टेस्ट के प्रश्न और चारों विकल्प हिंदी आवाज़ में सुनें।</p>
+{% else %}<section class="table-card stet-ai-panel" aria-label="Roshani Kumari AI टीचर">
+ <h2>👩‍🏫 Roshani Kumari AI टीचर</h2>
+ <p>प्रश्न और चारों विकल्प रोशनी जी की AI आवाज़ में सुनें।</p>
  <div class="stet-ai-actions">
   <button type="button" class="btn btn-large" id="stetReadCurrent">🔊 यह प्रश्न सुनें</button>
   <button type="button" class="btn btn-outline" id="stetReadAll">▶ सभी प्रश्न पढ़ें</button>
@@ -12,7 +11,7 @@
   <button type="button" class="btn btn-outline" id="stetResume">जारी रखें</button>
   <button type="button" class="btn btn-outline" id="stetStop">■ बंद करें</button>
  </div>
- <small id="stetVoiceStatus" role="status">प्रश्न सुनने के लिए बटन दबाएँ। हिंदी महिला आवाज़ उपलब्ध होने पर उसे चुना जाएगा।</small>
+ <small id="stetVoiceStatus" role="status">Roshani AI आवाज़ तैयार है। सुनने के लिए बटन दबाएँ।</small>
 </section>
 <style>
 .stet-ai-panel{margin:18px 0;border:1px solid #e8c9f7;background:linear-gradient(135deg,#fff4fa,#f5efff)}
@@ -22,50 +21,46 @@
 </style>
 <script>
 (function(){
- const panel=document.querySelector('.stet-ai-panel');
- if(!panel)return;
+ const panel=document.querySelector('.stet-ai-panel'); if(!panel)return;
  const status=document.getElementById('stetVoiceStatus');
- if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
-  status.textContent='इस ब्राउज़र में आवाज़ की सुविधा उपलब्ध नहीं है। Chrome या Edge में खोलें।';return;
- }
- const synth=window.speechSynthesis; let queue=[],current=0;
- function hindiVoice(){
-  const voices=synth.getVoices().filter(v=>/^hi(-|_|$)/i.test(v.lang));
-  return voices.find(v=>/female|woman|heera|kalpana|swara|aditi|neerja/i.test(v.name))||voices[0]||null;
- }
+ let audio=null, queue=[], current=0, paused=false, requestNo=0;
+ function getCards(){return [...document.querySelectorAll('#combined-mock-form .question-card')];}
  function questionText(card,index){
   const title=card.querySelector('h3')?.innerText||'';
   const opts=[...card.querySelectorAll('label.option')].map((el,i)=>{
-   const key=['A','B','C','D'][i]; const txt=el.innerText.replace(/^\s*[ABCD]\.\s*/, '').trim();
+   const key=['A','B','C','D'][i];
+   const txt=el.innerText.replace(/^\s*[ABCD]\.\s*/, '').trim();
    return `विकल्प ${key}: ${txt}`;
   });
   return `प्रश्न संख्या ${index+1}. ${title}. ${opts.join('. ')}`;
  }
- function speakText(text,onend){
-  const u=new SpeechSynthesisUtterance(text);u.lang='hi-IN';u.rate=0.88;u.pitch=1.08;
-  const v=hindiVoice();if(v)u.voice=v;
-  u.onend=onend||null;u.onerror=()=>{status.textContent='आवाज़ चलाने में समस्या हुई। डिवाइस की हिंदी आवाज़ जाँचें।'};
-  synth.speak(u);
- }
- function readNext(){
+ function stop(){requestNo++; if(audio){audio.pause();audio.src='';audio=null;} queue=[];current=0;paused=false;}
+ async function playNext(){
   if(current>=queue.length){status.textContent='पढ़ना पूरा हुआ।';return;}
-  status.textContent=`महिला टीचर प्रश्न ${current+1} पढ़ा रही हैं…`;
-  speakText(queue[current],()=>{current++;readNext();});
+  const thisRequest=requestNo;
+  status.textContent=`Roshani जी प्रश्न ${current+1} पढ़ रही हैं…`;
+  try{
+   const res=await fetch('/api/avi-voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:queue[current]})});
+   const data=await res.json();
+   if(thisRequest!==requestNo)return;
+   if(!res.ok||!data.audio_url)throw new Error(data.error||'TTS request failed');
+   audio=new Audio(data.audio_url);
+   audio.onended=()=>{if(thisRequest!==requestNo)return;current++;playNext();};
+   audio.onerror=()=>{status.textContent='ऑडियो चलाने में समस्या हुई।';};
+   if(!paused) await audio.play();
+  }catch(err){status.textContent='Roshani AI आवाज़ नहीं चल पाई: '+err.message;}
  }
- function getCards(){return [...document.querySelectorAll('#combined-mock-form .question-card')];}
  function readCurrent(){
-  synth.cancel();const cards=getCards();const active=document.activeElement?.closest('.question-card');
+  stop(); const cards=getCards(); const active=document.activeElement?.closest('.question-card');
   const card=active||cards.find(c=>c.getBoundingClientRect().bottom>0)||cards[0];
   if(!card){status.textContent='प्रश्न उपलब्ध नहीं हैं।';return;}
-  const index=cards.indexOf(card);speakText(questionText(card,index));status.textContent=`प्रश्न ${index+1} पढ़ा जा रहा है…`;
+  const idx=cards.indexOf(card);queue=[questionText(card,idx)];playNext();
  }
  document.getElementById('stetReadCurrent').addEventListener('click',readCurrent);
- document.getElementById('stetReadAll').addEventListener('click',()=>{synth.cancel();queue=getCards().map((c,i)=>questionText(c,i));current=0;if(!queue.length){status.textContent='प्रश्न उपलब्ध नहीं हैं।';return;}readNext();});
- document.getElementById('stetPause').addEventListener('click',()=>{if(synth.speaking){synth.pause();status.textContent='पढ़ना रोक दिया गया।';}});
- document.getElementById('stetResume').addEventListener('click',()=>{synth.resume();status.textContent='पढ़ना जारी है…';});
- document.getElementById('stetStop').addEventListener('click',()=>{synth.cancel();queue=[];current=0;status.textContent='पढ़ना बंद कर दिया गया।';});
- if(synth.onvoiceschanged!==undefined)synth.onvoiceschanged=()=>{};
+ document.getElementById('stetReadAll').addEventListener('click',()=>{stop();queue=getCards().map((c,i)=>questionText(c,i));if(!queue.length){status.textContent='प्रश्न उपलब्ध नहीं हैं।';return;}playNext();});
+ document.getElementById('stetPause').addEventListener('click',()=>{paused=true;if(audio)audio.pause();status.textContent='पढ़ना रोक दिया गया।';});
+ document.getElementById('stetResume').addEventListener('click',()=>{paused=false;if(audio)audio.play();else if(queue.length)playNext();status.textContent='पढ़ना जारी है…';});
+ document.getElementById('stetStop').addEventListener('click',()=>{stop();status.textContent='पढ़ना बंद कर दिया गया।';});
 })();
-</script>
-{% endif %}<section class="table-card"><p><b>150 प्रश्न</b> • सभी विषय • हर बार प्रश्नों का क्रम Random</p><div class="class-chip">{% for name,count in subject_counts.items() if count %}{{ name }}: {{ count }}{% if not loop.last %} &nbsp; | &nbsp;{% endif %}{% endfor %}</div><div id="mock-timer" class="class-chip" style="position:sticky;top:8px;z-index:5;margin:16px 0">150:00 शेष</div></section>
+</script><section class="table-card"><p><b>150 प्रश्न</b> • सभी विषय • हर बार प्रश्नों का क्रम Random</p><div class="class-chip">{% for name,count in subject_counts.items() if count %}{{ name }}: {{ count }}{% if not loop.last %} &nbsp; | &nbsp;{% endif %}{% endfor %}</div><div id="mock-timer" class="class-chip" style="position:sticky;top:8px;z-index:5;margin:16px 0">150:00 शेष</div></section>
 <form method="post" action="{{ url_for(submit_endpoint or 'submit_combined_mock_test', **({'slug': test_slug, 'set_no': set_no} if submit_endpoint == 'submit_exam_set' else ({'slug': test_slug} if test_slug and test_slug != 'mock-test' else {}))) }}" id="combined-mock-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="class_no" value="{{ class_no }}">{% for q in questions %}<section class="question-card"><div class="q-meta">प्रश्न {{ loop.index }} • {{ q.subject }}{% if q.chapter %} • {{ q.chapter }}{% endif %}</div><h3>{{ q.question }}</h3>{% for key,label in [('A',q.a),('B',q.b),('C',q.c),('D',q.d)] %}<label class="option"><input type="radio" name="q{{ q.id }}" value="{{ key }}"><span><b>{{ key }}.</b> {{ label }}</span></label>{% endfor %}<input type="hidden" name="qid" value="{{ q.id }}"></section>{% endfor %}<button class="btn btn-large" type="submit">150 प्रश्नों का टेस्ट जमा करें</button></form><script>(function(){let left={{ (timer_minutes or 150)|int }}*60,el=document.getElementById('mock-timer'),form=document.getElementById('combined-mock-form');let timer=setInterval(()=>{left--;el.textContent=Math.floor(left/60).toString().padStart(2,'0')+':'+(left%60).toString().padStart(2,'0')+' शेष';if(left<=0){clearInterval(timer);el.textContent='समय समाप्त — टेस्ट जमा हो रहा है';form.submit();}},1000);})();</script>{% endif %}{% endblock %}

@@ -1,0 +1,13 @@
+AVI CLASSES – Roshani Kumari AI Voice Setup
+
+1. Render Dashboard > AVI CLASSES service > Environment में ये variables सेट करें:
+   HEYGEN_API_KEY = आपका HeyGen API key
+   HEYGEN_VOICE_ID = d0897479f183443a9d22a43efae46b8f
+
+2. Save Changes करके नया deploy होने दें।
+3. Student login करके /mock-test खोलें और Roshani Kumari AI टीचर पैनल में आवाज़ जाँचें।
+
+महत्वपूर्ण:
+- API key को GitHub code या ChatGPT chat में न डालें। केवल Render Environment में रखें।
+- HeyGen API access/plan और usage charges लागू हो सकते हैं।
+- इस ZIP में app.py और templates/mock_test.html अपडेट किए गए हैं। यह अपने आप GitHub/Render पर deploy नहीं हुआ है।

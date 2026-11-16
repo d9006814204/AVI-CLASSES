@@ -1504,6 +1504,48 @@ def submit_exam_set(slug, set_no):
     db.session.commit(); session.pop('exam_attempt',None)
     return render_template('mock_result.html',score=score,total=150,results=results,subject_scores=subject_scores,class_no=attempt['class_no'],test_title=f'{EXAM_CATEGORIES[slug]} • SET-{set_no:02d}')
 
+
+
+@app.route('/api/avi-voice', methods=['POST'])
+@login_required('student')
+def avi_roshani_voice_tts():
+    """Generate Hindi speech using the approved Roshani Kumari HeyGen voice clone."""
+    api_key = os.environ.get('HEYGEN_API_KEY', '').strip()
+    voice_id = os.environ.get('HEYGEN_VOICE_ID', 'd0897479f183443a9d22a43efae46b8f').strip()
+    if not api_key:
+        return jsonify({'error': 'HEYGEN_API_KEY Render Environment में सेट नहीं है।'}), 503
+    payload = request.get_json(silent=True) or {}
+    speech_text = str(payload.get('text', '')).strip()
+    if not speech_text or len(speech_text) > 5000:
+        return jsonify({'error': 'पढ़ने के लिए सही टेक्स्ट भेजें (अधिकतम 5000 अक्षर)।'}), 400
+    body = json.dumps({
+        'voice_id': voice_id,
+        'text': speech_text,
+        'language': 'hi'
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        'https://api.heygen.com/v3/models/audio/tts',
+        data=body,
+        headers={'X-Api-Key': api_key, 'Content-Type': 'application/json'},
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            result = json.loads(response.read().decode('utf-8'))
+        audio_url = (result.get('data') or {}).get('audio_url') or result.get('audio_url')
+        if not audio_url:
+            app.logger.error('HeyGen TTS response missing audio_url: %s', json.dumps(result)[:1200])
+            return jsonify({'error': 'HeyGen से audio URL नहीं मिला। Render logs देखें।'}), 502
+        return jsonify({'audio_url': audio_url})
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode('utf-8', errors='replace')[:1000]
+        app.logger.error('HeyGen TTS HTTP %s: %s', exc.code, detail)
+        return jsonify({'error': f'HeyGen API error ({exc.code})। Render logs देखें।'}), 502
+    except Exception:
+        app.logger.exception('Roshani AI voice TTS failed')
+        return jsonify({'error': 'Roshani AI voice सेवा अभी उपलब्ध नहीं है। Render logs देखें।'}), 502
+
+
 @app.route('/mock-test')
 @login_required('student')
 def combined_mock_test():
